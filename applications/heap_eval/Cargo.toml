@@ -8,6 +8,7 @@ build = "../../build.rs"
 [dependencies]
 qp-trie = "0.7.3"
 getopts = "0.2.21"
+cfg-if = "0.1.6"
 
 [dependencies.terminal_print]
 path = "../../kernel/terminal_print"
@@ -37,3 +38,5 @@ path = "../../kernel/spawn"
 [dependencies.heap]
 path = "../../kernel/heap"
 
+[dependencies.pit_clock]
+path = "../../kernel/pit_clock"

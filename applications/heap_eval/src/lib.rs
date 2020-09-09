@@ -12,6 +12,9 @@ extern crate libtest;
 extern crate spawn;
 extern crate getopts;
 extern crate heap;
+#[macro_use] extern crate cfg_if;
+extern crate pit_clock;
+
 
 use alloc::{
     string::{String, ToString},

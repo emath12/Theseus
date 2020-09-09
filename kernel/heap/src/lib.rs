@@ -22,6 +22,8 @@ use spin::Once;
 use alloc::boxed::Box;
 use block_allocator::FixedSizeBlockAllocator;
 
+pub mod accounting;
+use accounting::HeapAccounting;
 
 #[global_allocator]
 pub static GLOBAL_ALLOCATOR: Heap = Heap::empty();
@@ -30,12 +32,12 @@ pub static GLOBAL_ALLOCATOR: Heap = Heap::empty();
 /// The default allocator is the one which is set up after the basic system initialization is completed. 
 /// Currently it is initialized with an instance of `MultipleHeaps`.
 /// We only make the default allocator visible when we want to explicitly use it without going through the global allocator.
-pub static DEFAULT_ALLOCATOR: Once<Box<dyn GlobalAlloc + Send + Sync>> = Once::new();
+pub static DEFAULT_ALLOCATOR: Once<Box<dyn HeapAccounting>> = Once::new();
 
 #[cfg(not(direct_access_to_multiple_heaps))]
 /// The default allocator is the one which is set up after the basic system initialization is completed. 
 /// Currently it is initialized with an instance of `MultipleHeaps`.
-static DEFAULT_ALLOCATOR: Once<Box<dyn GlobalAlloc + Send + Sync>> = Once::new();
+static DEFAULT_ALLOCATOR: Once<Box<dyn HeapAccounting>> = Once::new();
 
 /// The heap mapped pages should be writable
 pub const HEAP_FLAGS: EntryFlags = EntryFlags::WRITABLE;
@@ -51,7 +53,7 @@ pub fn init_single_heap(start_virt_addr: usize, size_in_bytes: usize) {
 
 
 /// Sets a new default allocator to be used by the global heap. It will start being used after this function is called.
-pub fn set_allocator(allocator: Box<dyn GlobalAlloc + Send + Sync>) {
+pub fn set_allocator(allocator: Box<dyn HeapAccounting>) {
     DEFAULT_ALLOCATOR.call_once(|| allocator);
 }
 
@@ -70,6 +72,20 @@ impl Heap {
         Heap {
             initial_allocator: MutexIrqSafe::new(FixedSizeBlockAllocator::new()),
         }
+    }
+}
+
+impl HeapAccounting for Heap {
+    fn allocated(&self, id: usize) -> usize {
+        DEFAULT_ALLOCATOR.try().and_then(|heap| Some(heap.allocated(id))).unwrap_or(0)
+    }
+
+    fn used(&self, id: usize) -> usize {
+        DEFAULT_ALLOCATOR.try().and_then(|heap| Some(heap.used(id))).unwrap_or(0)
+    }
+
+    fn allocated_and_used(&self, id: usize) -> (usize, usize) {
+        DEFAULT_ALLOCATOR.try().and_then(|heap| Some(heap.allocated_and_used(id))).unwrap_or((0,0))
     }
 }
 

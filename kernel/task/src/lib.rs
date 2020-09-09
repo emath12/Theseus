@@ -904,6 +904,10 @@ impl TaskRef {
     pub fn is_restartable(&self) -> bool {
         self.0.deref().0.lock().restart_info.is_some()
     }
+
+    pub fn id(&self) -> usize {
+        self.0.deref().0.lock().id
+    }
 }
 
 impl PartialEq for TaskRef {

@@ -18,7 +18,6 @@ use crate::{NTHREADS, ALLOCATOR, TRIES};
 #[cfg(direct_access_to_multiple_heaps)]
 use crate::overhead_of_accessing_multiple_heaps;
 
-
 pub(crate) static NITERATIONS: AtomicUsize = AtomicUsize::new(1000);
 /// Sum total of objects to be allocated by all threads
 pub(crate) static NOBJECTS: AtomicUsize = AtomicUsize::new(100_000);
@@ -29,54 +28,162 @@ const REGULAR_SIZE: usize = 8;
 /// The size allocated when the large allocations option is chosen
 pub const LARGE_SIZE: usize = 8192;
 
-pub fn do_threadtest() -> Result<(), &'static str> {
+cfg_if! {
+if #[cfg(heap_fragmentation_eval)] {
+    use heap::accounting::HeapAccounting;
+    static RECORD_FRAGMENTATION: AtomicUsize = AtomicUsize::new(0);
 
-    let nthreads = NTHREADS.load(Ordering::SeqCst);
-    let mut tries = Vec::with_capacity(TRIES as usize);
+    pub fn do_threadtest() -> Result<(), &'static str> {
 
-    let hpet_overhead = hpet_timing_overhead()?;
-    let hpet = get_hpet().ok_or("couldn't get HPET timer")?;
+        let nthreads = NTHREADS.load(Ordering::SeqCst);
 
-    println!("Running threadtest for {} threads, {} iterations, {} total objects allocated every iteration by all threads, {} obj size ...", 
-        nthreads, NITERATIONS.load(Ordering::SeqCst), NOBJECTS.load(Ordering::SeqCst), OBJSIZE.load(Ordering::SeqCst));
+        let hpet_overhead = hpet_timing_overhead()?;
+        let hpet = get_hpet().ok_or("couldn't get HPET timer")?;
 
-    #[cfg(direct_access_to_multiple_heaps)]
-    {
-        let overhead = overhead_of_accessing_multiple_heaps()?;
-        println!("Overhead of accessing multiple heaps is: {} ticks, {} ns", overhead, hpet_2_us(overhead));
-    }
+        println!("Running threadtest (FRAGMENTATION) for {} threads, {} iterations, {} total objects allocated every iteration by all threads, {} obj size ...", 
+            nthreads, NITERATIONS.load(Ordering::SeqCst), NOBJECTS.load(Ordering::SeqCst), OBJSIZE.load(Ordering::SeqCst));
 
-    for try in 0..TRIES {
+        let my_core = apic::get_my_apic_id();
+        let worker_core = runqueue::get_least_busy_core().unwrap() as usize;
+
         let mut threads = Vec::with_capacity(nthreads);
+        for _ in 0..nthreads {
+            let task = spawn::new_task_builder(worker, ()).name(String::from("worker thread")).pin_on_core(worker_core as u8).block().spawn()?;
+            // println!("task id: {}", task.id());
+            threads.push(task);
+        }  
+
+        let mut heap_ids = Vec::with_capacity(nthreads);
+
+        #[cfg(task_heaps)] 
+        {
+            println!("using per-TASK heaps");
+            for thread in &threads {
+                heap_ids.push(thread.id());
+            }
+        }
+
+        #[cfg(not(task_heaps))]
+        {
+            println!("using per-CORE heaps");
+            println!("start allocated: {}, start used: {}", ALLOCATOR.allocated(worker_core), ALLOCATOR.used(worker_core));
+            heap_ids.push(worker_core as usize);
+        }
+
+        let recording_task = spawn::new_task_builder(record_fragmentation, heap_ids).name(String::from("recording thread")).spawn()?;
 
         let start = hpet.get_counter();
 
-        for _ in 0..nthreads {
-            threads.push(spawn::new_task_builder(worker, ()).name(String::from("worker thread")).spawn()?);
-        }  
+        for thread in &threads {
+            thread.unblock();
+        }
 
         for i in 0..nthreads {
             threads[i].join()?;
         }
 
         let end = hpet.get_counter() - hpet_overhead;
+        RECORD_FRAGMENTATION.store(0, Ordering::SeqCst);
 
         // Don't want this to be part of the timing measurement
         for thread in threads {
             thread.take_exit_value();
         }
 
+        recording_task.join()?;
+        recording_task.take_exit_value();
+
         let diff = hpet_2_us(end - start);
-        println!("[{}] threadtest time: {} us", try, diff);
-        tries.push(diff);
+        println!("threadtest time: {} us", diff);
+
+        Ok(())
     }
 
-    println!("threadtest stats (us)");
-    println!("{:?}", calculate_stats(&tries));
+    fn record_fragmentation(heap_ids: Vec<usize>) {
+        let allocator = &ALLOCATOR;
+        let mut max_fragmentation = 0.0;
+        let mut max_allocated = 0;
+        let mut max_used = 0;
 
-    Ok(())
+        let nthreads = NTHREADS.load(Ordering::SeqCst);
+
+        while RECORD_FRAGMENTATION.load(Ordering::SeqCst) != nthreads {}
+        while RECORD_FRAGMENTATION.load(Ordering::SeqCst) != 0 { 
+            let mut allocated = 0;
+            let mut used = 0;
+
+            for id in &heap_ids {
+                let(a,u) = allocator.allocated_and_used(*id);
+                allocated += a;
+                used += u;
+            }
+
+            let fragmentation = allocated as f32 / used as f32;
+            if  fragmentation > max_fragmentation {
+                max_fragmentation = fragmentation;
+                max_allocated = allocated;
+                max_used = used;
+                trace!("fragmentation increased");
+            }
+
+            // record the fragmentation every 1 us
+            pit_clock::pit_wait(100).expect("threadtest: couldn't wait");
+        }
+
+        error!("fragmentation: {}, allocated: {}, used: {}", max_fragmentation, max_allocated, max_used);
+    }
+
+} else {
+
+    pub fn do_threadtest() -> Result<(), &'static str> {
+
+        let nthreads = NTHREADS.load(Ordering::SeqCst);
+        let mut tries = Vec::with_capacity(TRIES as usize);
+
+        let hpet_overhead = hpet_timing_overhead()?;
+        let hpet = get_hpet().ok_or("couldn't get HPET timer")?;
+
+        println!("Running threadtest for {} threads, {} iterations, {} total objects allocated every iteration by all threads, {} obj size ...", 
+            nthreads, NITERATIONS.load(Ordering::SeqCst), NOBJECTS.load(Ordering::SeqCst), OBJSIZE.load(Ordering::SeqCst));
+
+        #[cfg(direct_access_to_multiple_heaps)]
+        {
+            let overhead = overhead_of_accessing_multiple_heaps()?;
+            println!("Overhead of accessing multiple heaps is: {} ticks, {} ns", overhead, hpet_2_us(overhead));
+        }
+
+        for try in 0..TRIES {
+            let mut threads = Vec::with_capacity(nthreads);
+
+            let start = hpet.get_counter();
+
+            for _ in 0..nthreads {
+                threads.push(spawn::new_task_builder(worker, ()).name(String::from("worker thread")).spawn()?);
+            }  
+
+            for i in 0..nthreads {
+                threads[i].join()?;
+            }
+
+            let end = hpet.get_counter() - hpet_overhead;
+
+            // Don't want this to be part of the timing measurement
+            for thread in threads {
+                thread.take_exit_value();
+            }
+
+            let diff = hpet_2_us(end - start);
+            println!("[{}] threadtest time: {} us", try, diff);
+            tries.push(diff);
+        }
+
+        println!("threadtest stats (us)");
+        println!("{:?}", calculate_stats(&tries));
+
+        Ok(())
+    }
 }
-
+} //end cfg if
 
 fn worker(_:()) {
     #[cfg(not(direct_access_to_multiple_heaps))]
@@ -106,6 +213,9 @@ fn worker(_:()) {
     }
     let layout = Layout::from_size_align(obj_size, 8).unwrap();
 
+    #[cfg(heap_fragmentation_eval)]
+    RECORD_FRAGMENTATION.fetch_add(1, Ordering::SeqCst);
+
     for _ in 0..niterations {
         for i in 0..(nobjects/nthreads) {
             let ptr = unsafe{ allocator.alloc(layout) };
@@ -115,6 +225,9 @@ fn worker(_:()) {
             unsafe{ allocator.dealloc(allocations[i], layout); }
         }
     }
+
+    #[cfg(heap_fragmentation_eval)]
+    RECORD_FRAGMENTATION.fetch_sub(1, Ordering::SeqCst);    
 }
 
 

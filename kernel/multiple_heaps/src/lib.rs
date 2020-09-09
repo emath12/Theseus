@@ -31,6 +31,7 @@ extern crate apic;
 extern crate heap;
 extern crate hashbrown;
 #[macro_use] extern crate cfg_if;
+extern crate task;
 
 #[cfg(all(not(unsafe_heap), not(safe_heap)))]
 extern crate slabmalloc;
@@ -49,7 +50,10 @@ use memory::{MappedPages, VirtualAddress, get_frame_allocator_ref, get_kernel_mm
 use kernel_config::memory::{PAGE_SIZE, KERNEL_HEAP_START, KERNEL_HEAP_INITIAL_SIZE, KERNEL_HEAP_MAX_SIZE};
 use core::ops::{Add, Deref, DerefMut};
 use core::ptr;
-use heap::HEAP_FLAGS;
+use heap::{ 
+    HEAP_FLAGS,
+    accounting::HeapAccounting
+};
 use irq_safety::MutexIrqSafe;
 
 #[cfg(all(not(unsafe_heap), not(safe_heap)))]
@@ -87,8 +91,18 @@ pub const PER_CORE_HEAP_INITIAL_SIZE_PAGES: usize = ZoneAllocator::MAX_BASE_SIZE
 fn initialize_multiple_heaps() -> Result<MultipleHeaps, &'static str> {
     let mut multiple_heaps = MultipleHeaps::empty();
 
-    for (apic_id, _lapic) in apic::get_lapics().iter() {
-        init_individual_heap(*apic_id as usize, &mut multiple_heaps)?;
+    #[cfg(not(task_heaps))]
+    {
+        for (apic_id, _lapic) in apic::get_lapics().iter() {
+            init_individual_heap(*apic_id as usize, &mut multiple_heaps)?;
+        }
+    }
+
+    #[cfg(task_heaps)]
+    {
+        for i in 0..22 {
+            init_individual_heap(i, &mut multiple_heaps)?;
+        }
     }
 
     Ok(multiple_heaps)       
@@ -250,8 +264,15 @@ if #[cfg(unsafe_heap)] {
 /// Currently we use the apic id as the key, but we can replace it with some
 /// other value e.g. task id
 #[inline(always)] 
+#[cfg(not(task_heaps))]
 fn get_key() -> usize {
     apic::get_my_apic_id() as usize
+}
+
+#[inline(always)] 
+#[cfg(task_heaps)]
+fn get_key() -> usize {
+    task::get_my_current_task_id().expect("Couldn't get task id")
 }
 
 // The LockedHeap struct definition changes depending on the slabmalloc version used.
@@ -399,7 +420,6 @@ if #[cfg(unsafe_heap)] {
             heap.refill(layout, mp)
         }  
     }
-
 } else {
     impl MultipleHeaps {
         pub fn empty() -> MultipleHeaps {
@@ -436,6 +456,30 @@ if #[cfg(unsafe_heap)] {
             info!("grow_heap:: Allocated a page to refill core heap {} for size :{} at address: {:#X}", heap.heap_id, layout.size(), *heap_end);
             *heap_end += HEAP_MAPPED_PAGES_SIZE_IN_BYTES;
             heap.refill(layout, mp)
+        }
+    }
+
+    impl HeapAccounting for MultipleHeaps {
+        fn allocated(&self, id: usize) -> usize {
+            self.heaps.get(&id)
+                .expect("Heap with this key not initialized")
+                .0.lock()
+                .allocated
+        }
+
+        fn used(&self, id: usize) -> usize {
+            self.heaps.get(&id)
+                .expect("Heap with this key not initialized")
+                .0.lock()
+                .used
+        }
+
+        fn allocated_and_used(&self, id: usize) -> (usize, usize) {
+            let heap = self.heaps.get(&id)
+                .expect("Heap with this key not initialized")
+                .0.lock();
+            
+            (heap.allocated, heap.used)
         }  
     }
 }

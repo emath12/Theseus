@@ -12,6 +12,8 @@ macro_rules! new_zone {
     ($x:expr) => {
         ZoneAllocator {
             heap_id: $x,
+            allocated: 0,
+            used: 0,
             // TODO(perf): We should probably pick better classes
             // rather than powers-of-two (see SuperMalloc etc.)
             small_slabs: [
@@ -41,6 +43,8 @@ macro_rules! new_zone {
 /// to provide the underlying `SCAllocator` with more memory in case it runs out.
 pub struct ZoneAllocator<'a> {
     pub heap_id: usize,
+    pub allocated: usize,
+    pub used: usize,
     small_slabs: [SCAllocator<'a, ObjectPage8k<'a>>; ZoneAllocator::MAX_BASE_SIZE_CLASSES],
 }
 
@@ -164,7 +168,7 @@ impl<'a> ZoneAllocator<'a> {
 
     /// Allocate a pointer to a block of memory described by `layout`.
     pub fn allocate(&mut self, layout: Layout) -> Result<NonNull<u8>, &'static str> {
-        match ZoneAllocator::get_slab(layout.size()) {
+        let res = match ZoneAllocator::get_slab(layout.size()) {
             Slab::Base(idx) => {
                 match self.small_slabs[idx].allocate(layout) {
                     Ok(ptr) => Ok(ptr),
@@ -176,7 +180,9 @@ impl<'a> ZoneAllocator<'a> {
             }
             Slab::Large(_idx) => Err("AllocationError::InvalidLayout"),
             Slab::Unsupported => Err("AllocationError::InvalidLayout"),
-        }
+        };
+        
+        res.and_then(|ptr| {self.used += layout.size(); Ok(ptr) }) 
     }
 
     /// Deallocates a pointer to a block of memory, which was
@@ -186,11 +192,12 @@ impl<'a> ZoneAllocator<'a> {
     ///  * `ptr` - Address of the memory location to free.
     ///  * `layout` - Memory layout of the block pointed to by `ptr`.
     pub fn deallocate(&mut self, ptr: NonNull<u8>, layout: Layout) -> Result<(), &'static str> {
-        match ZoneAllocator::get_slab(layout.size()) {
+        let res = match ZoneAllocator::get_slab(layout.size()) {
             Slab::Base(idx) => self.small_slabs[idx].deallocate(ptr, layout),
             Slab::Large(_idx) => Err("AllocationError::InvalidLayout"),
             Slab::Unsupported => Err("AllocationError::InvalidLayout"),
-        }
+        };
+        res.and_then(|()| {self.used -= layout.size(); Ok(()) }) 
     }
 
     /// Refills the SCAllocator for a given Layout with a MappedPages8k.
@@ -205,6 +212,7 @@ impl<'a> ZoneAllocator<'a> {
         match ZoneAllocator::get_slab(layout.size()) {
             Slab::Base(idx) => {
                 self.small_slabs[idx].refill(mp, self.heap_id);
+                self.allocated += MappedPages8k::SIZE;
                 Ok(())
             }
             Slab::Large(_idx) => Err("AllocationError::InvalidLayout"),
