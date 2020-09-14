@@ -9,6 +9,7 @@ build = "../../build.rs"
 qp-trie = "0.7.3"
 getopts = "0.2.21"
 cfg-if = "0.1.6"
+spin = "0.4.10"
 
 [dependencies.terminal_print]
 path = "../../kernel/terminal_print"
@@ -40,3 +41,7 @@ path = "../../kernel/heap"
 
 [dependencies.pit_clock]
 path = "../../kernel/pit_clock"
+
+[dependencies.lazy_static]
+features = ["spin_no_std", "nightly"]
+version = "1.2.0"

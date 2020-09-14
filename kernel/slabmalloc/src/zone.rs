@@ -81,6 +81,13 @@ impl<'a> ZoneAllocator<'a> {
     /// A slab must have greater than this number of empty pages to return one.
     const SLAB_EMPTY_PAGES_THRESHOLD: usize = 0;
 
+    /// The number of empty pages in the heap to release one
+    const K: usize = 0;
+
+    /// empty fraction, if more than this number of pages are not in used then return one on deallocate
+    const F: f32 = 0.25;
+
+
     #[cfg(feature = "unstable")]
     pub const fn new(heap_id: usize) -> ZoneAllocator<'a> {
         new_zone!(heap_id)
@@ -145,6 +152,7 @@ impl<'a> ZoneAllocator<'a> {
             for slab in self.small_slabs.iter_mut() {
                 let empty_pages = slab.empty_slabs.elements;
                 if empty_pages > ZoneAllocator::SLAB_EMPTY_PAGES_THRESHOLD {
+                    self.allocated -= MappedPages8k::SIZE;
                     return slab.retrieve_empty_page()
                 }
             }
@@ -182,7 +190,7 @@ impl<'a> ZoneAllocator<'a> {
             Slab::Unsupported => Err("AllocationError::InvalidLayout"),
         };
         
-        res.and_then(|ptr| {self.used += layout.size(); Ok(ptr) }) 
+        res.and_then(|ptr| { self.used += layout.size(); Ok(ptr) }) 
     }
 
     /// Deallocates a pointer to a block of memory, which was
@@ -191,13 +199,21 @@ impl<'a> ZoneAllocator<'a> {
     /// # Arguments
     ///  * `ptr` - Address of the memory location to free.
     ///  * `layout` - Memory layout of the block pointed to by `ptr`.
-    pub fn deallocate(&mut self, ptr: NonNull<u8>, layout: Layout) -> Result<(), &'static str> {
-        let res = match ZoneAllocator::get_slab(layout.size()) {
-            Slab::Base(idx) => self.small_slabs[idx].deallocate(ptr, layout),
-            Slab::Large(_idx) => Err("AllocationError::InvalidLayout"),
-            Slab::Unsupported => Err("AllocationError::InvalidLayout"),
+    pub fn deallocate(&mut self, ptr: NonNull<u8>, layout: Layout) -> Result<Option<MappedPages8k>, &'static str> {
+        match ZoneAllocator::get_slab(layout.size()) {
+            Slab::Base(idx) => self.small_slabs[idx].deallocate(ptr, layout)?,
+            Slab::Large(_idx) => return Err("AllocationError::InvalidLayout"),
+            Slab::Unsupported => return Err("AllocationError::InvalidLayout"),
         };
-        res.and_then(|()| {self.used -= layout.size(); Ok(()) }) 
+        self.used -= layout.size(); 
+        // return a page if the emptiness threshold is reached
+        let mp = if ((self.empty_pages() > Self::K) && ((self.used as f32)  < ((1.0 - Self::F) * self.allocated as f32))) {
+            self.retrieve_empty_page(0)
+        } else {
+            None
+        };
+        
+        Ok(mp)  
     }
 
     /// Refills the SCAllocator for a given Layout with a MappedPages8k.

@@ -14,7 +14,8 @@ extern crate getopts;
 extern crate heap;
 #[macro_use] extern crate cfg_if;
 extern crate pit_clock;
-
+extern crate spin;
+#[macro_use] extern crate lazy_static;
 
 use alloc::{
     string::{String, ToString},

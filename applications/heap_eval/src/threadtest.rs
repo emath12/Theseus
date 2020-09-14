@@ -28,10 +28,22 @@ const REGULAR_SIZE: usize = 8;
 /// The size allocated when the large allocations option is chosen
 pub const LARGE_SIZE: usize = 8192;
 
+
+
 cfg_if! {
 if #[cfg(heap_fragmentation_eval)] {
     use heap::accounting::HeapAccounting;
+    use spin::Mutex;
+
+    static MAX_ALLOCATED: AtomicUsize = AtomicUsize::new(0);
+    static MAX_USED: AtomicUsize = AtomicUsize::new(0);
+    static MAX_FRAG_ALLOCATED: AtomicUsize = AtomicUsize::new(0);
+    static MAX_FRAG_USED: AtomicUsize = AtomicUsize::new(1);
     static RECORD_FRAGMENTATION: AtomicUsize = AtomicUsize::new(0);
+
+    lazy_static! {
+        pub static ref HEAPS_FOR_FRAGMENTATION: Mutex<Vec<usize>> = Mutex::new(Vec::new());
+    }
 
     pub fn do_threadtest() -> Result<(), &'static str> {
 
@@ -70,7 +82,7 @@ if #[cfg(heap_fragmentation_eval)] {
             heap_ids.push(worker_core as usize);
         }
 
-        let recording_task = spawn::new_task_builder(record_fragmentation, heap_ids).name(String::from("recording thread")).spawn()?;
+        *HEAPS_FOR_FRAGMENTATION.lock() = heap_ids;
 
         let start = hpet.get_counter();
 
@@ -83,54 +95,88 @@ if #[cfg(heap_fragmentation_eval)] {
         }
 
         let end = hpet.get_counter() - hpet_overhead;
-        RECORD_FRAGMENTATION.store(0, Ordering::SeqCst);
 
         // Don't want this to be part of the timing measurement
         for thread in threads {
             thread.take_exit_value();
         }
 
-        recording_task.join()?;
-        recording_task.take_exit_value();
-
         let diff = hpet_2_us(end - start);
         println!("threadtest time: {} us", diff);
+        unsafe{ println!("{} {}", MAX_ALLOCATED.load(Ordering::SeqCst), MAX_USED.load(Ordering::SeqCst)); }
+        unsafe{ println!("{} {} {}", MAX_FRAG_ALLOCATED.load(Ordering::SeqCst), MAX_FRAG_USED.load(Ordering::SeqCst), MAX_FRAG_ALLOCATED.load(Ordering::SeqCst) as f32/MAX_FRAG_USED.load(Ordering::SeqCst) as f32); }
+
 
         Ok(())
     }
 
-    fn record_fragmentation(heap_ids: Vec<usize>) {
+    fn worker(_:()) {
+        let heap_ids = HEAPS_FOR_FRAGMENTATION.lock().clone();
+
+        #[cfg(not(direct_access_to_multiple_heaps))]
         let allocator = &ALLOCATOR;
-        let mut max_fragmentation = 0.0;
-        let mut max_allocated = 0;
-        let mut max_used = 0;
 
+        // In the case of directly accessing the multiple heaps, we do have to access them through the Once wrapper
+        // at the beginning, but the time it takes to do this once at the beginning of thread is
+        // insignificant compared to the number of iterations we run. It also printed above.
+        #[cfg(direct_access_to_multiple_heaps)]
+        let allocator = match ALLOCATOR.try() {
+            Some(allocator) => allocator,
+            None => {
+                error!("Multiple heaps not initialized!");
+                return;
+            }
+        };
+
+        let niterations = NITERATIONS.load(Ordering::SeqCst);
+        let nobjects = NOBJECTS.load(Ordering::SeqCst);
         let nthreads = NTHREADS.load(Ordering::SeqCst);
+        let obj_size = OBJSIZE.load(Ordering::SeqCst);
 
-        while RECORD_FRAGMENTATION.load(Ordering::SeqCst) != nthreads {}
-        while RECORD_FRAGMENTATION.load(Ordering::SeqCst) != 0 { 
-            let mut allocated = 0;
-            let mut used = 0;
+        let mut allocations = Vec::with_capacity(nobjects/nthreads);
+        // initialize the vector so we do not measure the time of `push` and `pop`
+        for _ in 0..(nobjects / nthreads) {
+            allocations.push(ptr::null_mut());
+        }
+        let layout = Layout::from_size_align(obj_size, 8).unwrap();
 
-            for id in &heap_ids {
-                let(a,u) = allocator.allocated_and_used(*id);
-                allocated += a;
-                used += u;
+        RECORD_FRAGMENTATION.fetch_add(1, Ordering::SeqCst);
+        for _ in 0..niterations {
+            for i in 0..(nobjects/nthreads) {
+                let ptr = unsafe{ allocator.alloc(layout) };
+                allocations[i] = ptr;
+                update_allocated_and_used(&heap_ids);
             }
-
-            let fragmentation = allocated as f32 / used as f32;
-            if  fragmentation > max_fragmentation {
-                max_fragmentation = fragmentation;
-                max_allocated = allocated;
-                max_used = used;
-                trace!("fragmentation increased");
+            for i in 0..(nobjects/nthreads) {
+                unsafe{ allocator.dealloc(allocations[i], layout); }
+                update_allocated_and_used(&heap_ids);
             }
+        }  
+    }
 
-            // record the fragmentation every 1 us
-            pit_clock::pit_wait(100).expect("threadtest: couldn't wait");
+    fn update_allocated_and_used(heap_ids: &Vec<usize>) {
+        if RECORD_FRAGMENTATION.load(Ordering::SeqCst) != NTHREADS.load(Ordering::SeqCst) { return; }
+        let mut allocated = 0;
+        let mut used = 0;
+
+        for id in heap_ids {
+            let(a,u) = ALLOCATOR.allocated_and_used(*id);
+            allocated += a;
+            used += u;
         }
 
-        error!("fragmentation: {}, allocated: {}, used: {}", max_fragmentation, max_allocated, max_used);
+        unsafe {
+            if allocated > MAX_ALLOCATED.load(Ordering::SeqCst) {
+                MAX_ALLOCATED.store(allocated, Ordering::SeqCst);
+            }
+            if used > MAX_USED.load(Ordering::SeqCst) {
+                MAX_USED.store(used, Ordering::SeqCst);
+            }
+            if (allocated as f32 / used as f32) > (MAX_FRAG_ALLOCATED.load(Ordering::SeqCst) as f32 / MAX_FRAG_USED.load(Ordering::SeqCst) as f32) {
+                MAX_FRAG_ALLOCATED.store(allocated, Ordering::SeqCst);
+                MAX_FRAG_USED.store(used, Ordering::SeqCst);
+            }                
+        }
     }
 
 } else {
@@ -182,53 +228,49 @@ if #[cfg(heap_fragmentation_eval)] {
 
         Ok(())
     }
+
+    fn worker(_:()) {
+        #[cfg(not(direct_access_to_multiple_heaps))]
+        let allocator = &ALLOCATOR;
+
+        // In the case of directly accessing the multiple heaps, we do have to access them through the Once wrapper
+        // at the beginning, but the time it takes to do this once at the beginning of thread is
+        // insignificant compared to the number of iterations we run. It also printed above.
+        #[cfg(direct_access_to_multiple_heaps)]
+        let allocator = match ALLOCATOR.try() {
+            Some(allocator) => allocator,
+            None => {
+                error!("Multiple heaps not initialized!");
+                return;
+            }
+        };
+
+        let niterations = NITERATIONS.load(Ordering::SeqCst);
+        let nobjects = NOBJECTS.load(Ordering::SeqCst);
+        let nthreads = NTHREADS.load(Ordering::SeqCst);
+        let obj_size = OBJSIZE.load(Ordering::SeqCst);
+
+        let mut allocations = Vec::with_capacity(nobjects/nthreads);
+        // initialize the vector so we do not measure the time of `push` and `pop`
+        for _ in 0..(nobjects / nthreads) {
+            allocations.push(ptr::null_mut());
+        }
+        let layout = Layout::from_size_align(obj_size, 8).unwrap();
+
+        for _ in 0..niterations {
+            for i in 0..(nobjects/nthreads) {
+                let ptr = unsafe{ allocator.alloc(layout) };
+                allocations[i] = ptr;
+            }
+            for i in 0..(nobjects/nthreads) {
+                unsafe{ allocator.dealloc(allocations[i], layout); }
+            }
+        }  
+    }
 }
 } //end cfg if
 
-fn worker(_:()) {
-    #[cfg(not(direct_access_to_multiple_heaps))]
-    let allocator = &ALLOCATOR;
 
-    // In the case of directly accessing the multiple heaps, we do have to access them through the Once wrapper
-    // at the beginning, but the time it takes to do this once at the beginning of thread is
-    // insignificant compared to the number of iterations we run. It also printed above.
-    #[cfg(direct_access_to_multiple_heaps)]
-    let allocator = match ALLOCATOR.try() {
-        Some(allocator) => allocator,
-        None => {
-            error!("Multiple heaps not initialized!");
-            return;
-        }
-    };
-
-    let niterations = NITERATIONS.load(Ordering::SeqCst);
-    let nobjects = NOBJECTS.load(Ordering::SeqCst);
-    let nthreads = NTHREADS.load(Ordering::SeqCst);
-    let obj_size = OBJSIZE.load(Ordering::SeqCst);
-
-    let mut allocations = Vec::with_capacity(nobjects/nthreads);
-    // initialize the vector so we do not measure the time of `push` and `pop`
-    for _ in 0..(nobjects / nthreads) {
-        allocations.push(ptr::null_mut());
-    }
-    let layout = Layout::from_size_align(obj_size, 8).unwrap();
-
-    #[cfg(heap_fragmentation_eval)]
-    RECORD_FRAGMENTATION.fetch_add(1, Ordering::SeqCst);
-
-    for _ in 0..niterations {
-        for i in 0..(nobjects/nthreads) {
-            let ptr = unsafe{ allocator.alloc(layout) };
-            allocations[i] = ptr;
-        }
-        for i in 0..(nobjects/nthreads) {
-            unsafe{ allocator.dealloc(allocations[i], layout); }
-        }
-    }
-
-    #[cfg(heap_fragmentation_eval)]
-    RECORD_FRAGMENTATION.fetch_sub(1, Ordering::SeqCst);    
-}
 
 
 

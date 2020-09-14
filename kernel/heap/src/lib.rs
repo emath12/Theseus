@@ -87,6 +87,10 @@ impl HeapAccounting for Heap {
     fn allocated_and_used(&self, id: usize) -> (usize, usize) {
         DEFAULT_ALLOCATOR.try().and_then(|heap| Some(heap.allocated_and_used(id))).unwrap_or((0,0))
     }
+
+    fn max_allocated_and_used(&self) -> (usize, usize) {
+        DEFAULT_ALLOCATOR.try().and_then(|heap| Some(heap.max_allocated_and_used())).unwrap_or((0,0))
+    }
 }
 
 unsafe impl GlobalAlloc for Heap {
