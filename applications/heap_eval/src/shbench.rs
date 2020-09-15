@@ -50,6 +50,8 @@ if #[cfg(heap_fragmentation_eval)] {
     pub fn do_shbench() -> Result<(), &'static str> {
 
         let nthreads = NTHREADS.load(Ordering::SeqCst);
+        // NTHREADS.store(1, Ordering::SeqCst);
+
         let niterations = NITERATIONS.load(Ordering::SeqCst);
 
         let hpet_overhead = hpet_timing_overhead()?;
@@ -258,10 +260,10 @@ if #[cfg(heap_fragmentation_eval)] {
             if used > MAX_USED.load(Ordering::SeqCst) {
                 MAX_USED.store(used, Ordering::SeqCst);
             }
-            if (allocated as f32 / used as f32) > (MAX_FRAG_ALLOCATED.load(Ordering::SeqCst) as f32 / MAX_FRAG_USED.load(Ordering::SeqCst) as f32) {
+            if allocated > MAX_FRAG_ALLOCATED.load(Ordering::SeqCst) {
                 MAX_FRAG_ALLOCATED.store(allocated, Ordering::SeqCst);
                 MAX_FRAG_USED.store(used, Ordering::SeqCst);
-            }                
+            }                              
         }
     }
 
