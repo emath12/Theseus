@@ -65,3 +65,9 @@ path = "../../kernel/pmu_x86"
 
 [dependencies.mod_mgmt]
 path = "../../kernel/mod_mgmt"
+
+[dependencies.fastpath_ipc]
+path = "../../kernel/fastpath_ipc"
+
+[dependencies.irq_safety]
+git = "https://github.com/kevinaboos/irq_safety"

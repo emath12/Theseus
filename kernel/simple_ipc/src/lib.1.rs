@@ -5,18 +5,14 @@
 #![feature(no_more_cas)]
 #![feature(naked_functions)]
 extern crate alloc;
-#[macro_use] extern crate log;
+// #[macro_use] extern crate log;
 extern crate bit_field;
 extern crate pmu_x86;
-extern crate task;
-extern crate scheduler;
 
 use core::sync::atomic::{Ordering, AtomicU16};
 use alloc::sync::Arc;
 use bit_field::BitField;
 use pmu_x86::{Counter};
-use task::TaskRef;
-use scheduler::switch_to;
 
 /// A channel implemented using a lock-free shared buffer 
 struct Channel {
@@ -67,7 +63,7 @@ impl Sender{
     /// Task will spin in a loop until the full flag is cleared. 
     // #[naked]   
     // #[inline(always)]
-    pub fn send(&self, msg: u8, receiver_task: &TaskRef, task: &TaskRef) {
+    pub fn send(&self, msg: u8) {
         let mut res = Err(0); //self.try_send(msg);
         while res.is_err() {
             res = self.0.buffer.fetch_update( |val| {
@@ -77,10 +73,8 @@ impl Sender{
                 } else {
                     None
                 }
-            }, Ordering::SeqCst, Ordering::SeqCst);
+            }, Ordering::Release, Ordering::Relaxed)
         }
-        warn!("send");
-        switch_to(receiver_task, task);
     }
 
     // #[inline(always)]
@@ -134,11 +128,10 @@ impl Receiver {
                 } else {
                     None
                 }
-            }, Ordering::SeqCst, Ordering::SeqCst);
+            }, Ordering::Release, Ordering::Relaxed);
         }
         // unwrap is safe here since the condition is checked in the loop
-        debug!("receive");
-        res.map(|msg| (msg >> 8) as u8).unwrap_or(0)
+        res.map(|msg| (msg >> 8) as u8).unwrap()
     }
 
     // #[inline(always)] 

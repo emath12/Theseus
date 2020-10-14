@@ -1,7 +1,7 @@
 #![no_std]
 
 extern crate alloc;
-// #[macro_use] extern crate log;
+#[macro_use] extern crate log;
 extern crate irq_safety;
 extern crate apic;
 extern crate task;
@@ -62,6 +62,36 @@ pub fn schedule() -> bool {
 
     curr.task_switch(next, apic_id); 
 
+    // let new_current: TaskId = CURRENT_TASK.load(Ordering::SeqCst);
+    // trace!("AFTER TASK_SWITCH CALL (current={}), interrupts are {}", new_current, ::interrupts::interrupts_enabled());
+ 
+    true
+}
+
+pub fn switch_to(task_ref: &TaskRef, current_taskref: &TaskRef) -> bool {
+    // let _held_interrupts = hold_interrupts(); // auto-reenables interrupts on early return
+
+    let current_task: *mut Task;
+    let next_task: *mut Task; 
+    let apic_id = get_my_apic_id();
+
+    {
+        next_task = task_ref.lock().deref() as *const Task as *mut Task;
+    }
+
+    // same scoping reasons as above: to release the lock around current_task
+    {
+        current_task = current_taskref.lock().deref() as *const Task as *mut Task; 
+    }
+
+    // we want mutable task references without the locks, and we use unsafe code to obtain those references
+    // because the scope-based lock guard won't drop properly after the actual task_switch occurs.
+    let (curr, next) = unsafe { (&mut *current_task, &mut *next_task) };
+
+    // trace!("BEFORE TASK_SWITCH CALL (AP {}), current={}, next={}, interrupts are {}", apic_id, curr, next, irq_safety::interrupts_enabled());
+
+    curr.task_switch(next, apic_id); 
+    warn!("switched to other task");
     // let new_current: TaskId = CURRENT_TASK.load(Ordering::SeqCst);
     // trace!("AFTER TASK_SWITCH CALL (current={}), interrupts are {}", new_current, ::interrupts::interrupts_enabled());
  

@@ -617,6 +617,80 @@ impl Task {
         let _prev_task_data_to_drop = self.drop_after_task_switch.take();
 
     }
+
+    /// Switches from the current (`self`)  to the given `next` Task.
+    /// 
+    /// No locks need to be held to call this, but interrupts (later, preemption) should be disabled.
+    pub fn fast_task_switch(&mut self, next: &mut Task, apic_id: u8) {
+        debug!("task_switch [0]: (AP {}) prev {:?}, next {:?}", apic_id, self, next);         
+
+        /// A private macro that actually calls the given context switch routine.
+        macro_rules! call_context_switch {
+            ($func:expr) => ( unsafe {
+                $func(&mut self.saved_sp as *mut usize, next.saved_sp);
+            });
+        }
+
+        // Now it's time to perform the actual context switch.
+        // If `simd_personality` is NOT enabled, then we proceed as normal 
+        // using the singular context_switch routine that matches the actual build target. 
+        #[cfg(not(simd_personality))]
+        {
+            call_context_switch!(context_switch::context_switch);
+        }
+        // If `simd_personality` is enabled, all `context_switch*` routines are available,
+        // which allows us to choose one based on whether the prev/next Tasks are SIMD-enabled.
+        #[cfg(simd_personality)]
+        {
+            match (&self.simd, &next.simd) {
+                (SimdExt::None, SimdExt::None) => {
+                    // warn!("SWITCHING from REGULAR to REGULAR task {:?} -> {:?}", self, next);
+                    call_context_switch!(context_switch::context_switch_regular);
+                }
+
+                (SimdExt::None, SimdExt::SSE)  => {
+                    // warn!("SWITCHING from REGULAR to SSE task {:?} -> {:?}", self, next);
+                    call_context_switch!(context_switch::context_switch_regular_to_sse);
+                }
+                
+                (SimdExt::None, SimdExt::AVX)  => {
+                    // warn!("SWITCHING from REGULAR to AVX task {:?} -> {:?}", self, next);
+                    call_context_switch!(context_switch::context_switch_regular_to_avx);
+                }
+
+                (SimdExt::SSE, SimdExt::None)  => {
+                    // warn!("SWITCHING from SSE to REGULAR task {:?} -> {:?}", self, next);
+                    call_context_switch!(context_switch::context_switch_sse_to_regular);
+                }
+
+                (SimdExt::SSE, SimdExt::SSE)   => {
+                    // warn!("SWITCHING from SSE to SSE task {:?} -> {:?}", self, next);
+                    call_context_switch!(context_switch::context_switch_sse);
+                }
+
+                (SimdExt::SSE, SimdExt::AVX) => {
+                    warn!("SWITCHING from SSE to AVX task {:?} -> {:?}", self, next);
+                    call_context_switch!(context_switch::context_switch_sse_to_avx);
+                }
+
+                (SimdExt::AVX, SimdExt::None) => {
+                    // warn!("SWITCHING from AVX to REGULAR task {:?} -> {:?}", self, next);
+                    call_context_switch!(context_switch::context_switch_avx_to_regular);
+                }
+
+                (SimdExt::AVX, SimdExt::SSE) => {
+                    warn!("SWITCHING from AVX to SSE task {:?} -> {:?}", self, next);
+                    call_context_switch!(context_switch::context_switch_avx_to_sse);
+                }
+
+                (SimdExt::AVX, SimdExt::AVX) => {
+                    // warn!("SWITCHING from AVX to AVX task {:?} -> {:?}", self, next);
+                    call_context_switch!(context_switch::context_switch_avx);
+                }
+            }
+        }
+
+    }
 }
 
 impl Drop for Task {

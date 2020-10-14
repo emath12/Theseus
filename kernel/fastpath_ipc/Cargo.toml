@@ -1,12 +1,15 @@
 [package]
 authors = ["Ramla Ijaz <ijazramla@gmail.com>"]
-name = "simple_ipc"
-description = "An extremely basic mechanism for IPC that uses a lock-free shared buffer"
+name = "fastpath_ipc"
+description = "An unsafe version of IPC that that copies the seL4 fastpath"
 version = "0.1.0"
 build = "../../build.rs"
 
 [dependencies]
 bit_field = "0.7.0"
+spin = "0.4.10"
+volatile = "0.2.5"
+
 
 [dependencies.log]
 version = "0.4.8"
@@ -19,6 +22,9 @@ path = "../task"
 
 [dependencies.scheduler]
 path = "../scheduler"
+
+[dependencies.irq_safety]
+git = "https://github.com/kevinaboos/irq_safety"
 
 [lib]
 crate-type = ["rlib"]

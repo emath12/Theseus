@@ -208,10 +208,12 @@ version = "0.1.0"
 dependencies = [
  "apic 0.1.0",
  "async_channel 0.1.0",
+ "fastpath_ipc 0.1.0",
  "fs_node 0.1.0",
  "getopts 0.2.21 (git+https://github.com/kevinaboos/getopts)",
  "heapfile 0.1.0",
  "hpet 0.1.0",
+ "irq_safety 0.1.1 (git+https://github.com/kevinaboos/irq_safety)",
  "libtest 0.1.0",
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "memory 0.1.0",
@@ -683,6 +685,20 @@ dependencies = [
 name = "fallible-iterator"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "fastpath_ipc"
+version = "0.1.0"
+dependencies = [
+ "bit_field 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "irq_safety 0.1.1 (git+https://github.com/kevinaboos/irq_safety)",
+ "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
+ "pmu_x86 0.1.0",
+ "scheduler 0.1.0",
+ "spin 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "task 0.1.0",
+ "volatile 0.2.5 (registry+https://github.com/rust-lang/crates.io-index)",
+]
 
 [[package]]
 name = "fault_crate_swap"
@@ -2156,6 +2172,9 @@ version = "0.1.0"
 dependencies = [
  "bit_field 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
+ "pmu_x86 0.1.0",
+ "scheduler 0.1.0",
+ "task 0.1.0",
 ]
 
 [[package]]
