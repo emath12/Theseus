@@ -29,6 +29,8 @@ extern crate simple_ipc;
 extern crate getopts;
 extern crate pmu_x86;
 extern crate mod_mgmt;
+extern crate fastpath_ipc;
+extern crate irq_safety;
 
 use core::str;
 use alloc::vec::Vec;
@@ -42,13 +44,14 @@ use libtest::*;
 use memory::{create_mapping, EntryFlags};
 use getopts::Options;
 use mod_mgmt::crate_name_from_path;
+use fastpath_ipc::*;
 
 const SEC_TO_NANO: u64 = 1_000_000_000;
 const SEC_TO_MICRO: u64 = 1_000_000;
 const MB: u64 = 1024 * 1024;
 const KB: u64 = 1024;
 
-const ITERATIONS: usize = 10_000;
+const ITERATIONS: usize = 10; 
 const TRIES: usize = 10;
 
 const READ_BUF_SIZE: usize = 64*1024;
@@ -85,6 +88,7 @@ pub fn main(args: Vec<String>) -> isize {
     opts.optflag("", "memory_map", "create and destroy a memory mapping");
     opts.optflag("", "ipc", "1-byte IPC round trip time. Need to specify channel type ('a' or 'r')");
     opts.optflag("", "simple_ipc", "1-byte IPC round trip time with the simple ipc implementation");
+    opts.optflag("", "fastpath_ipc", "1-byte IPC round trip time with the simple ipc implementation");
     opts.optflag("", "fs_read_with_open", "file read including open");
     opts.optflag("", "fs_read_only", "file read");
     opts.optflag("", "fs_create", "file create");
@@ -171,6 +175,13 @@ pub fn main(args: Vec<String>) -> isize {
 			} else {
 				println!("SIMPLE IPC");
 				do_ipc_simple(pinned, cycles)
+			}
+		} else if matches.opt_present("fastpath_ipc") {
+			if cfg!(not(bm_ipc)) {
+				Err("Need to enable bm_ipc config option to run the IPC benchmark")
+			} else {
+				println!("Fastpath IPC");
+				do_ipc_fastpath(pinned, cycles)
 			}
 		} else if matches.opt_present("fs_read_with_open") {
 			do_fs_read(true /*with_open*/)
@@ -997,7 +1008,8 @@ fn do_ipc_simple(pinned: bool, cycles: bool) -> Result<(), &'static str> {
 		let lat = if cycles {
 			do_ipc_simple_inner_cycles(i+1, TRIES, child_core)?
 		} else {
-			do_ipc_simple_inner(i+1, TRIES, child_core)?
+			// do_ipc_simple_inner(i+1, TRIES, child_core)?
+			1
 		};
 
 		tries += lat;
@@ -1028,77 +1040,78 @@ fn do_ipc_simple(pinned: bool, cycles: bool) -> Result<(), &'static str> {
 	Ok(())
 }
 
-/// Internal function that actually calculates the round trip time to send a message between two threads.
-/// This is measured by creating a child task, and sending messages between the parent and child.
-/// Overhead is measured by creating a tasks that just returns.
-fn do_ipc_simple_inner(th: usize, nr: usize, child_core: Option<u8>) -> Result<u64, &'static str> {
-	let hpet = get_hpet().ok_or("Could not retrieve hpet counter")?;
+// /// Internal function that actually calculates the round trip time to send a message between two threads.
+// /// This is measured by creating a child task, and sending messages between the parent and child.
+// /// Overhead is measured by creating a tasks that just returns.
+// fn do_ipc_simple_inner(th: usize, nr: usize, child_core: Option<u8>) -> Result<u64, &'static str> {
+// 	let hpet = get_hpet().ok_or("Could not retrieve hpet counter")?;
 
-	// we first spawn one task to get the overhead of creating and joining the task
-	// we will subtract this time from the total time so that we are left with the actual time for IPC
+// 	// we first spawn one task to get the overhead of creating and joining the task
+// 	// we will subtract this time from the total time so that we are left with the actual time for IPC
 
-	let start = hpet.get_counter();
+// 	let start = hpet.get_counter();
 
-		let taskref3;
+// 		let taskref3;
 
-		if let Some(core) = child_core {		
-			taskref3 = spawn::new_task_builder(overhead_task ,1)
-				.name(String::from("overhead_task_1"))
-				.pin_on_core(core)
-				.spawn()?;
-		} else {
-			taskref3 = spawn::new_task_builder(overhead_task ,1)
-				.name(String::from("overhead_task_1"))
-				.spawn()?;
-		}
+// 		if let Some(core) = child_core {		
+// 			taskref3 = spawn::new_task_builder(overhead_task ,1)
+// 				.name(String::from("overhead_task_1"))
+// 				.pin_on_core(core)
+// 				.spawn()?;
+// 		} else {
+// 			taskref3 = spawn::new_task_builder(overhead_task ,1)
+// 				.name(String::from("overhead_task_1"))
+// 				.spawn()?;
+// 		}
 		
-		taskref3.join()?;
-		taskref3.take_exit_value().ok_or("could not retrieve exit value")?;
+// 		taskref3.join()?;
+// 		taskref3.take_exit_value().ok_or("could not retrieve exit value")?;
 
-	let overhead = hpet.get_counter();
+// 	let overhead = hpet.get_counter();
 
-		// we then create the sender and receiver endpoints for the 2 tasks
-		let (sender1, receiver1) = simple_ipc::new_channel();
-		let (sender2, receiver2) = simple_ipc::new_channel();
+// 		// we then create the sender and receiver endpoints for the 2 tasks
+// 		let (sender1, receiver1) = simple_ipc::new_channel();
+// 		let (sender2, receiver2) = simple_ipc::new_channel();
 		
-		let taskref1;
+// 		let taskref1;
 
-		if let Some(core) = child_core {		
-			taskref1 = spawn::new_task_builder(simple_task_sender, (sender1, receiver2))
-				.name(String::from("sender"))
-				.pin_on_core(core)
-				.spawn()?;
-		} else {
-			taskref1 = spawn::new_task_builder(simple_task_sender, (sender1, receiver2))
-				.name(String::from("sender"))
-				.spawn()?;
-		}
+// 		if let Some(core) = child_core {		
+// 			taskref1 = spawn::new_task_builder(simple_task_sender, (sender1, receiver2))
+// 				.name(String::from("sender"))
+// 				.pin_on_core(core)
+// 				.spawn()?;
+// 		} else {
+// 			taskref1 = spawn::new_task_builder(simple_task_sender, (sender1, receiver2))
+// 				.name(String::from("sender"))
+// 				.spawn()?;
+// 		}
 
 
-		// then we initiate IPC betweeen the parent and child tasks
-		simple_task_receiver((sender2, receiver1));
+// 		// then we initiate IPC betweeen the parent and child tasks
+// 		simple_task_receiver((sender2, receiver1));
 
-		taskref1.join()?;
-		taskref1.take_exit_value().ok_or("could not retrieve exit value")?;
+// 		taskref1.join()?;
+// 		taskref1.take_exit_value().ok_or("could not retrieve exit value")?;
 
-	let end = hpet.get_counter();
+// 	let end = hpet.get_counter();
 
-	let delta_overhead = overhead - start;
-	let delta_hpet = end - overhead - delta_overhead;
-	let delta_time = hpet_2_time("", delta_hpet);
-	let overhead_time = hpet_2_time("", delta_overhead);
-	let delta_time_avg = delta_time / ITERATIONS as u64;
-	printlninfo!("ipc_rendezvous_inner ({}/{}): total_overhead -> {} {} , {} total_time -> {} {}",
-		th, nr, overhead_time, T_UNIT, delta_time, delta_time_avg, T_UNIT);
+// 	let delta_overhead = overhead - start;
+// 	let delta_hpet = end - overhead - delta_overhead;
+// 	let delta_time = hpet_2_time("", delta_hpet);
+// 	let overhead_time = hpet_2_time("", delta_overhead);
+// 	let delta_time_avg = delta_time / ITERATIONS as u64;
+// 	printlninfo!("ipc_rendezvous_inner ({}/{}): total_overhead -> {} {} , {} total_time -> {} {}",
+// 		th, nr, overhead_time, T_UNIT, delta_time, delta_time_avg, T_UNIT);
 
-	Ok(delta_time_avg)
-}
+// 	Ok(delta_time_avg)
+// }
 
 /// Internal function that actually calculates the round trip time to send a message between two threads.
 /// This is measured by creating a child task, and sending messages between the parent and child.
 /// Overhead is measured by creating a tasks that just returns.
 fn do_ipc_simple_inner_cycles(th: usize, nr: usize, child_core: Option<u8>) -> Result<u64, &'static str> {
 	pmu_x86::init()?;
+	let task = task::get_my_current_task().expect("schedule(): get_my_current_task() failed");
 	let mut counter = start_counting_reference_cycles()?;
 	// let mut counter2 = pmu_x86::Counter::new(pmu_x86::EventType::BranchMissesRetired)?;
 	// let mut counter3 = pmu_x86::Counter::new(pmu_x86::EventType::BranchInstructionsRetired)?;
@@ -1137,19 +1150,21 @@ fn do_ipc_simple_inner_cycles(th: usize, nr: usize, child_core: Option<u8>) -> R
 		let taskref1;
 
 		if let Some(core) = child_core {		
-			taskref1 = spawn::new_task_builder(simple_task_sender, (sender1, receiver2))
+			taskref1 = spawn::new_task_builder(simple_task_receiver, (sender1, receiver2, task))
 				.name(String::from("sender"))
 				.pin_on_core(core)
+				.block()
 				.spawn()?;
 		} else {
-			taskref1 = spawn::new_task_builder(simple_task_sender, (sender1, receiver2))
+			taskref1 = spawn::new_task_builder(simple_task_receiver, (sender1, receiver2, task))
 				.name(String::from("sender"))
+				.block()
 				.spawn()?;
 		}
 
 
 		// then we initiate IPC betweeen the parent and child tasks
-		simple_task_receiver((sender2, receiver1));
+		simple_task_sender((sender2, receiver1, &taskref1));
 
 		taskref1.join()?;
 		taskref1.take_exit_value().ok_or("could not retrieve exit value")?;
@@ -1171,25 +1186,193 @@ fn do_ipc_simple_inner_cycles(th: usize, nr: usize, child_core: Option<u8>) -> R
 }
 
 /// A task which sends and then receives a message for a number of iterations
-fn simple_task_sender((sender, receiver): (simple_ipc::Sender, simple_ipc::Receiver)) {
+fn simple_task_sender((sender, receiver, receiver_task): (simple_ipc::Sender, simple_ipc::Receiver,  &task::TaskRef)) {
 	let mut msg = 0;
+	let task = task::get_my_current_task().expect("schedule(): get_my_current_task() failed");
+	let _held_interrupts = irq_safety::hold_interrupts();
+
+	receiver_task.unblock();
+	
     for _ in 0..ITERATIONS{
-		sender.send(msg);
+		sender.send(msg, receiver_task, task);
+		// scheduler::switch_to(receiver_task);
 		// scheduler::schedule();
         msg = receiver.receive();
     }
 }
 
 /// A task which receives and then sends a message for a number of iterations
-fn simple_task_receiver((sender, receiver): (simple_ipc::Sender, simple_ipc::Receiver)) {
+fn simple_task_receiver((sender, receiver, receiver_task): (simple_ipc::Sender, simple_ipc::Receiver, &task::TaskRef)) {
 	let mut msg;
+	let task = task::get_my_current_task().expect("schedule(): get_my_current_task() failed");
+
     for _ in 0..ITERATIONS{
 		msg = receiver.receive();
-		sender.send(msg);
+		sender.send(msg, receiver_task, task);
+		// scheduler::switch_to(receiver_task);
 		// scheduler::schedule();
     }
 }
 
+/// Measures the round trip time to send a 1-byte message on a simple channel. 
+/// Calls `do_ipc_simple_inner` multiple times to perform the actual operation
+fn do_ipc_fastpath(pinned: bool, cycles: bool) -> Result<(), &'static str> {
+	let child_core = if pinned {
+		Some(CPU_ID!())
+	} else {
+		None
+	};
+
+	let mut tries: u64 = 0;
+	let mut max: u64 = core::u64::MIN;
+	let mut min: u64 = core::u64::MAX;
+	let mut vec = Vec::with_capacity(TRIES);
+	
+	print_header(TRIES, ITERATIONS);
+
+	for i in 0..TRIES {
+		let lat = if cycles {
+			do_ipc_fastpath_inner_cycles(i+1, TRIES, child_core)?
+		} else {
+			// do_ipc_simple_inner(i+1, TRIES, child_core)?
+			1
+		};
+
+		tries += lat;
+		vec.push(lat);
+
+		if lat > max {max = lat;}
+		if lat < min {min = lat;}
+	}
+
+	let lat = tries / TRIES as u64;
+
+	// We expect the maximum and minimum to be within 10*THRESHOLD_ERROR_RATIO % of the mean value
+	let err = (lat * 10 * THRESHOLD_ERROR_RATIO) / 100;
+	if 	max - lat > err || lat - min > err {
+		printlnwarn!("ipc_fastpath_test diff is too big: {} ({} - {})", max-min, max, min);
+	}
+	let stats = calculate_stats(&vec).ok_or("couldn't calculate stats")?;
+
+	if cycles {
+		printlninfo!("IPC FASTPATH result: Round Trip Time: (cycles)");
+	} else {
+		printlninfo!("IPC FASTPATH result: Round Trip Time: ({})", T_UNIT);
+	}
+
+	printlninfo!("{:?}", stats);
+	printlninfo!("This test does not have an equivalent test in LMBench");
+
+	Ok(())
+}
+
+/// Internal function that actually calculates the round trip time to send a message between two threads.
+/// This is measured by creating a child task, and sending messages between the parent and child.
+/// Overhead is measured by creating a tasks that just returns.
+fn do_ipc_fastpath_inner_cycles(th: usize, nr: usize, child_core: Option<u8>) -> Result<u64, &'static str> {
+	pmu_x86::init()?;
+	let task = task::get_my_current_task().expect("schedule(): get_my_current_task() failed");
+	let mut counter = start_counting_reference_cycles()?;
+	// let mut counter2 = pmu_x86::Counter::new(pmu_x86::EventType::BranchMissesRetired)?;
+	// let mut counter3 = pmu_x86::Counter::new(pmu_x86::EventType::BranchInstructionsRetired)?;
+
+
+	// we first spawn one task to get the overhead of creating and joining the task
+	// we will subtract this time from the total time so that we are left with the actual time for IPC
+
+		counter.start()?;
+
+		let taskref3;
+
+		if let Some(core) = child_core {		
+			taskref3 = spawn::new_task_builder(overhead_task ,1)
+				.name(String::from("overhead_task_1"))
+				.pin_on_core(core)
+				.spawn()?;
+		} else {
+			taskref3 = spawn::new_task_builder(overhead_task ,1)
+				.name(String::from("overhead_task_1"))
+				.spawn()?;
+		}
+		
+		taskref3.join()?;
+		taskref3.take_exit_value().ok_or("could not retrieve exit value")?;
+
+	let overhead = counter.diff();
+	counter.start()?;
+	// counter2.start()?;
+	// counter3.start()?;
+
+		// we then create the sender and receiver endpoints for the 2 tasks
+		let (client, server) = fastpath_ipc::new_channel();
+		
+		let taskref1;
+
+		if let Some(core) = child_core {	
+			println!("pinned server task");	
+			taskref1 = spawn::new_task_builder(fastpath_task_server, (server, task))
+				.name(String::from("server"))
+				.pin_on_core(core)
+				.block()
+				.spawn()?
+		} else {
+			taskref1 = spawn::new_task_builder(fastpath_task_server, (server, task))
+				.name(String::from("server"))
+				.block()
+				.spawn()?;
+		}
+
+
+		// then we initiate IPC betweeen the parent and child tasks
+		fastpath_task_client((client, &taskref1));
+
+		taskref1.join()?;
+		taskref1.take_exit_value().ok_or("could not retrieve exit value")?;
+
+	let end = counter.end()?;
+	// let cache_misses = counter2.end()?;
+	// let cache_ref = counter3.end()?;
+
+		
+	let delta_overhead = overhead;
+	let delta_cycles = end - delta_overhead;
+	let delta_cycles_avg = delta_cycles / ITERATIONS as u64;
+	printlninfo!("ipc_rendezvous_inner ({}/{}): total_overhead -> {} cycles , {} total_time -> {} cycles",
+		th, nr, delta_overhead, delta_cycles, delta_cycles_avg);
+	
+	// println!("Cache misses: {}, ref: {}, {:.2} %", cache_misses, cache_ref, cache_misses as f32 / cache_ref as f32);
+
+	Ok(delta_cycles_avg)
+}
+
+/// A task which sends and then receives a message for a number of iterations
+fn fastpath_task_client((client, server_task): (fastpath_ipc::Client,  &task::TaskRef)) {
+	let mut msg = 0;
+	let task = task::get_my_current_task().expect("schedule(): get_my_current_task() failed");
+
+	let _held_interrupts = irq_safety::hold_interrupts();
+	server_task.unblock();
+
+		client.send(msg, server_task, task);
+    for _ in 0..ITERATIONS{
+		msg = client.receive(server_task,task);
+		client.send(msg, server_task, task);
+    }
+	println!("Here");
+	loop{}
+	//interrupts re-enabled here
+}
+
+/// A task which receives and then sends a message for a number of iterations
+fn fastpath_task_server((server, client_task): (fastpath_ipc::Server, &task::TaskRef)) {
+	let mut msg = 0;
+	let task = task::get_my_current_task().expect("schedule(): get_my_current_task() failed");
+
+    for _ in 0..ITERATIONS{
+		msg = server.receive_reply(msg, client_task, task);
+    }
+	loop{}
+}
 
 /// Wrapper function used to measure file read and file read with open. 
 /// Accepts a bool argument. If true includes the latency to open a file

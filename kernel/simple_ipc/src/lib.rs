@@ -19,6 +19,7 @@ use task::TaskRef;
 use scheduler::switch_to;
 
 /// A channel implemented using a lock-free shared buffer 
+#[repr(align(64))]
 struct Channel {
     // The upper 8 bits are the buffer and the LSB is the full flag which indicates
     // whether the buffer has been used and has a message stored in it. 
@@ -53,43 +54,31 @@ impl Sender{
         .ok()
     }
 
-    // pub fn try_send(&self, msg: u8) -> Option<u8> {
-    //     let prev = self.0.buffer.load(Ordering::SeqCst);
-    //     if !prev.get_bit(0) {
-    //         self.0.buffer.store((msg as u16) << 8 | 0x1, Ordering::SeqCst);
-    //         Some((prev >> 8) as u8 & 0xFF)
-    //     } else {
-    //         None
-    //     }
-    // }
-
-    /// Tries to send a message until succesful.
-    /// Task will spin in a loop until the full flag is cleared. 
-    // #[naked]   
-    // #[inline(always)]
-    pub fn send(&self, msg: u8, receiver_task: &TaskRef, task: &TaskRef) {
-        let mut res = Err(0); //self.try_send(msg);
-        while res.is_err() {
-            res = self.0.buffer.fetch_update( |val| {
-                if val & 0x1 == 0x0 {
-                    let msg: u16 = ((msg as u16) << 8) | 0x1;
-                    Some(msg)
-                } else {
-                    None
-                }
-            }, Ordering::SeqCst, Ordering::SeqCst);
-        }
-        warn!("send");
-        switch_to(receiver_task, task);
-    }
-
-    // #[inline(always)]
+    // // /// Tries to send a message until succesful.
+    // // /// Task will spin in a loop until the full flag is cleared. 
+    // // // #[naked]   
+    // // #[inline(always)]
     // pub fn send(&self, msg: u8) {
-    //     let mut res = self.try_send(msg);
-    //     while res.is_none() {
-    //         res = self.try_send(msg);
+    //     let mut res = Err(0); //self.try_send(msg);
+    //     while res.is_err() {
+    //         res = self.0.buffer.fetch_update( |val| {
+    //             if val & 0x1 == 0x0 {
+    //                 let msg: u16 = ((msg as u16) << 8) | 0x1;
+    //                 Some(msg)
+    //             } else {
+    //                 None
+    //             }
+    //         }, Ordering::SeqCst, Ordering::SeqCst);
     //     }
     // }
+
+    #[inline(always)]
+    pub fn send(&self, msg: u8) {
+        let mut res = self.try_send(msg);
+        while res.is_none() {
+            res = self.try_send(msg);
+        }
+    }
 }
 
 /// Channel endpoint that only allows receiving messages.
@@ -111,45 +100,35 @@ impl Receiver {
         .ok()
     }
 
-    // pub fn try_receive(&self) -> Option<u8> {
-    //     let msg = self.0.buffer.load(Ordering::SeqCst);
-    //     if msg.get_bit(0) {
-    //         self.0.buffer.store(0, Ordering::SeqCst);
-    //         Some((msg >> 8) as u8 & 0xFF)
-    //     } else {
-    //         None
-    //     }
-    // }
 
-    /// Tries to receive a message until succesful.
-    /// Task will spin in a loop until the full flag is set.
-    // #[naked]   
-    // #[inline(always)] 
-    pub fn receive(&self) -> u8 {
-        let mut res = Err(0); //self.try_receive();
-        while res.is_err() {
-            res = self.0.buffer.fetch_update( |val| {
-                if val & 0x1 == 0x1 {
-                    Some(0)
-                } else {
-                    None
-                }
-            }, Ordering::SeqCst, Ordering::SeqCst);
-        }
-        // unwrap is safe here since the condition is checked in the loop
-        debug!("receive");
-        res.map(|msg| (msg >> 8) as u8).unwrap_or(0)
-    }
-
+    // // /// Tries to receive a message until succesful.
+    // // /// Task will spin in a loop until the full flag is set.
+    // // // #[naked]   
     // #[inline(always)] 
     // pub fn receive(&self) -> u8 {
-    //     let mut res = self.try_receive();
-    //     while res.is_none() {
-    //         res = self.try_receive();
+    //     let mut res = Err(0); //self.try_receive();
+    //     while res.is_err() {
+    //         res = self.0.buffer.fetch_update( |val| {
+    //             if val & 0x1 == 0x1 {
+    //                 Some(0)
+    //             } else {
+    //                 None
+    //             }
+    //         }, Ordering::SeqCst, Ordering::SeqCst);
     //     }
     //     // unwrap is safe here since the condition is checked in the loop
-    //     res.unwrap()
+    //     res.map(|msg| (msg >> 8) as u8).unwrap()
     // }
+
+    #[inline(always)] 
+    pub fn receive(&self) -> u8 {
+        let mut res = self.try_receive();
+        while res.is_none() {
+            res = self.try_receive();
+        }
+        // unwrap is safe here since the condition is checked in the loop
+        res.unwrap()
+    }
 }
 
 /// Creates a new channel and returns the endpoints
