@@ -136,7 +136,7 @@ impl LapicIpiDestination {
 pub fn init(_page_table: &mut PageTable) -> Result<(), &'static str> {
     let x2 = has_x2apic();
     debug!("is x2apic? {}.  IA32_APIC_BASE (phys addr): {:#X}", 
-        x2, PhysicalAddress::new(rdmsr(IA32_APIC_BASE) as usize)?
+        x2, PhysicalAddress::new(rdmsr(IA32_APIC_BASE) as usize).map_err(|_e| "IA32_APIC_BASE paddr was invalid")?
     );
 
     if !x2 {
@@ -152,7 +152,7 @@ pub fn init(_page_table: &mut PageTable) -> Result<(), &'static str> {
 fn map_apic(page_table: &mut PageTable) -> Result<MappedPages, &'static str> {
     if has_x2apic() { return Err("map_apic() is only for use in apic/xapic systems, not x2apic."); }
     
-    let phys_addr = PhysicalAddress::new(rdmsr(IA32_APIC_BASE) as usize)?;
+    let phys_addr = PhysicalAddress::new(rdmsr(IA32_APIC_BASE) as usize).map_err(|_e| "IA32_APIC_BASE (in map_apic()) paddr was invalid")?;
     let new_page = allocate_pages(1).ok_or("out of virtual address space!")?;
     let flags = EntryFlags::WRITABLE | EntryFlags::NO_CACHE | EntryFlags::NO_EXECUTE;
     let apic_mapped_page = if let Ok(allocated_frame) = allocate_frames_at(phys_addr, 1) {

@@ -172,7 +172,7 @@ impl HpetAcpiTable {
     /// 
     /// Returns a reference to the initialized `Hpet` structure.
     pub fn init_hpet(&self, page_table: &mut PageTable) -> Result<&'static RwLock<BoxRefMut<MappedPages, Hpet>>, &'static str> {
-        let phys_addr = PhysicalAddress::new(self.gen_addr_struct.phys_addr as usize)?;
+        let phys_addr = PhysicalAddress::new(self.gen_addr_struct.phys_addr as usize).map_err(|_e| "init_hpet(): gen_addr_struct paddr was invalid")?;
         let frames = allocate_frames_by_bytes_at(phys_addr, self.header.length as usize)
             .map_err(|_e| "Couldn't allocate frames for HPET")?;
         let pages = allocate_pages(frames.size_in_frames())

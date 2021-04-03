@@ -34,7 +34,12 @@ pub fn init<P: Pixel>() -> Result<Framebuffer<P>, &'static str> {
         if graphic_info.physical_address == 0 {
             return Err("Fail to get graphic mode infomation!");
         }
-        vesa_display_phys_start = PhysicalAddress::new(graphic_info.physical_address as usize)?;
+        vesa_display_phys_start = PhysicalAddress::new(graphic_info.physical_address as usize)
+            .map_err(|_e| {
+                let s = alloc::format!("framebuffer::init(): graphic_info paddr was invalid: {:#X}, w*h = {}*{}", graphic_info.physical_address, graphic_info.width, graphic_info.height);
+                let err: &'static str = alloc::boxed::Box::leak(s.into_boxed_str());
+                err
+            })?;
         buffer_width = graphic_info.width as usize;
         buffer_height = graphic_info.height as usize;
     };
