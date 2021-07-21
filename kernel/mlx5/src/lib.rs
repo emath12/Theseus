@@ -210,54 +210,54 @@ impl ConnectX5Nic {
         let status = cmdq.wait_for_command_completion(cmdq_entry);
         trace!("Init HCA status: {:?}", status);
 
-        // // Query pages for regular
-        // let cmdq_entry = cmdq.create_command(CommandOpcode::QueryPages, Some(QueryPagesOpmod::RegularPages as u16), None, None, None)?;
-        // init_segment.post_command(cmdq_entry);
-        // let status = cmdq.wait_for_command_completion(cmdq_entry);
-        // let num_regular_pages = cmdq.get_query_pages_command_output(cmdq_entry)?;
-        // trace!("Query pages status: {:?}, Regular pages: {:?}", status, num_regular_pages);
+        // Query pages for regular
+        let cmdq_entry = cmdq.create_command(CommandOpcode::QueryPages, Some(QueryPagesOpmod::RegularPages as u16), None, None, None)?;
+        init_segment.post_command(cmdq_entry);
+        let status = cmdq.wait_for_command_completion(cmdq_entry);
+        let num_regular_pages = cmdq.get_query_pages_command_output(cmdq_entry)?;
+        trace!("Query pages status: {:?}, Regular pages: {:?}", status, num_regular_pages);
 
-        // // Allocate regular pages
-        // if num_regular_pages != 0 {
-        //     let mut boot_mp = Vec::with_capacity(num_init_pages as usize);
-        //     let mut boot_pa = Vec::with_capacity(num_init_pages as usize);
-        //     for _ in 0..num_regular_pages {
-        //         let (page, pa) = create_contiguous_mapping(4096, NIC_MAPPING_FLAGS)?;
-        //         boot_mp.push(page);
-        //         error!("pa: {:#X}", pa.value());
-        //         boot_pa.push(pa);
-        //     }
-        //     let cmdq_entry = cmdq.create_command(CommandOpcode::ManagePages, Some(ManagePagesOpmod::AllocationSuccess as u16), Some(boot_pa), None, None)?;
-        //     init_segment.post_command(cmdq_entry);
-        //     let status = cmdq.wait_for_command_completion(cmdq_entry);
-        //     trace!("Manage pages regular status: {:?}", status);
-        // }
+        // Allocate regular pages
+        if num_regular_pages != 0 {
+            let mut boot_mp = Vec::with_capacity(num_init_pages as usize);
+            let mut boot_pa = Vec::with_capacity(num_init_pages as usize);
+            for _ in 0..num_regular_pages {
+                let (page, pa) = create_contiguous_mapping(4096, NIC_MAPPING_FLAGS)?;
+                boot_mp.push(page);
+                error!("pa: {:#X}", pa.value());
+                boot_pa.push(pa);
+            }
+            let cmdq_entry = cmdq.create_command(CommandOpcode::ManagePages, Some(ManagePagesOpmod::AllocationSuccess as u16), Some(boot_pa), None, None)?;
+            init_segment.post_command(cmdq_entry);
+            let status = cmdq.wait_for_command_completion(cmdq_entry);
+            trace!("Manage pages regular status: {:?}", status);
+        }
 
         // allocate uar
-        // let cmdq_entry = cmdq.create_command(CommandOpcode::AllocUar, None, None, None, None)?;
-        // init_segment.post_command(cmdq_entry);
-        // let status = cmdq.wait_for_command_completion(cmdq_entry);
-        // trace!("UAR status: {:?}", status);        
+        let cmdq_entry = cmdq.create_command(CommandOpcode::AllocUar, None, None, None, None)?;
+        init_segment.post_command(cmdq_entry);
+        let status = cmdq.wait_for_command_completion(cmdq_entry);
+        trace!("UAR status: {:?}", status);        
 
-        // let uar = cmdq.get_uar(cmdq_entry)?;
-        // trace!("UAR status: {:?}, UAR: {}", status, uar);        
+        let uar = cmdq.get_uar(cmdq_entry)?;
+        trace!("UAR status: {:?}, UAR: {}", status, uar);        
 
-        // // create EQ for a Page Request Event
-        // // Allocate pages for EQ
-        // let num_eq_pages = 1;
-        // let mut eq_mp = Vec::with_capacity(num_eq_pages as usize);
-        // let mut eq_pa = Vec::with_capacity(num_eq_pages as usize);
-        // for _ in 0..num_eq_pages {
-        //     let (page, pa) = create_contiguous_mapping(4096, NIC_MAPPING_FLAGS)?;
-        //     eq_mp.push(page);
-        //     error!("pa: {:#X}", pa.value());
-        //     eq_pa.push(pa);
-        // }
-        // let cmdq_entry = cmdq.create_command(CommandOpcode::CreateEq, None, Some(eq_pa), Some(uar), Some(7))?;
-        // init_segment.post_command(cmdq_entry);
-        // let status = cmdq.wait_for_command_completion(cmdq_entry);
-        // let eq_number = cmdq.get_eq_number(cmdq_entry)?;
-        // trace!("Create EQ status: {:?}, number: {}", status, eq_number);
+        // create EQ for a Page Request Event
+        // Allocate pages for EQ
+        let num_eq_pages = 1;
+        let mut eq_mp = Vec::with_capacity(num_eq_pages as usize);
+        let mut eq_pa = Vec::with_capacity(num_eq_pages as usize);
+        for _ in 0..num_eq_pages {
+            let (page, pa) = create_contiguous_mapping(4096, NIC_MAPPING_FLAGS)?;
+            eq_mp.push(page);
+            error!("pa: {:#X}", pa.value());
+            eq_pa.push(pa);
+        }
+        let cmdq_entry = cmdq.create_command(CommandOpcode::CreateEq, None, Some(eq_pa), Some(uar), Some(7))?;
+        init_segment.post_command(cmdq_entry);
+        let status = cmdq.wait_for_command_completion(cmdq_entry);
+        let eq_number = cmdq.get_eq_number(cmdq_entry)?;
+        trace!("Create EQ status: {:?}, number: {}", status, eq_number);
 
         Ok(())
 

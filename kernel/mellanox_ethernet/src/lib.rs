@@ -915,6 +915,80 @@ impl CommandQueue {
 
         Ok(())
     }
+
+    fn create_completion_queue() {
+
+    }
+}
+
+#[derive(FromBytes)]
+#[repr(C)]
+struct CompletionQueueContext {
+    status:                 Volatile<U32<BigEndian>>,
+    _padding1:              u32,
+    page_offset:            Volatile<U32<BigEndian>>,
+    uar_log_cq_size:        Volatile<U32<BigEndian>>,
+    cq_max_count_period:    Volatile<U32<BigEndian>>,
+    c_eqn:                  Volatile<U32<BigEndian>>,
+    log_page_size:          Volatile<U32<BigEndian>>,
+    _padding2:              u32,
+    last_notified_index:    Volatile<U32<BigEndian>>,
+    last_solicit_index:     Volatile<U32<BigEndian>>,
+    consumer_counter:       Volatile<U32<BigEndian>>,
+    producer_counter:       Volatile<U32<BigEndian>>,
+    _padding3:              u64,
+    dbr_addr:               Volatile<u64>,
+}
+
+const_assert_eq!(core::mem::size_of::<CompletionQueueContext>(), 64);
+
+impl CompletionQueueContext {
+    pub fn init(&mut self, uar_page: u32, log_cq_size: u8) {
+    }
+}
+
+#[derive(FromBytes)]
+#[repr(C)]
+struct SendQueueContext {
+    state:                              Volatile<U32<BigEndian>>,
+    user_index:                         Volatile<U32<BigEndian>>,
+    cqn:                                Volatile<U32<BigEndian>>,
+    hairpin_peer_rq:                    Volatile<U32<BigEndian>>,
+    _padding1:                          u64,
+    packet_pacing_rate_limit_index:     Volatile<U32<BigEndian>>,
+    tis_lst_sz:                         Volatile<U32<BigEndian>>,
+    _padding2:                          u64,
+    tis_num:                            Volatile<U32<BigEndian>>,
+}
+
+const_assert_eq!(core::mem::size_of::<SendQueueContext>(), 48);
+
+impl SendQueueContext {
+    pub fn init(&mut self, uar_page: u32, log_cq_size: u8) {
+    }
+}
+
+#[derive(FromBytes)]
+#[repr(C)]
+struct WorkQueue {
+    wq_type:                    Volatile<U32<BigEndian>>,
+    page_offset_lwm:            Volatile<U32<BigEndian>>,
+    pd:                         Volatile<U32<BigEndian>>,
+    uar_page:                   Volatile<U32<BigEndian>>,
+    dbr_addr_h:                 Volatile<U32<BigEndian>>,
+    dbr_addr_l:                 Volatile<U32<BigEndian>>,
+    hw_counter:                 Volatile<U32<BigEndian>>,
+    sw_counter:                 Volatile<U32<BigEndian>>,
+    log_wq_size_stride:         Volatile<U32<BigEndian>>,
+    log_hairpin_num_packets:    Volatile<U32<BigEndian>>,
+    _padding1:                  [u8; 152],
+}
+
+const_assert_eq!(core::mem::size_of::<WorkQueue>(), 192);
+
+impl WorkQueue {
+    pub fn init(&mut self, uar_page: u32, log_cq_size: u8) {
+    }
 }
 
 #[derive(FromBytes)]
