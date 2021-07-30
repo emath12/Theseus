@@ -189,6 +189,7 @@ impl CommandQueueEntry {
     }
 
     fn get_command_opcode(&self) -> CommandOpcode {
+        let opcode = self.command_input_opcode.read().get() >> 16;
         match self.command_input_opcode.read().get() >> 16 {
             0x100 => {CommandOpcode::QueryHcaCap},
             0x101 => {CommandOpcode::QueryAdapter}, 
@@ -200,6 +201,8 @@ impl CommandQueueEntry {
             0x108 => {CommandOpcode::ManagePages}, 
             0x10A => {CommandOpcode::QueryIssi}, 
             0x10B => {CommandOpcode::SetIssi}, 
+            0x802 => CommandOpcode::AllocUar,
+            0x301 => CommandOpcode::CreateEq,
             _ => {CommandOpcode::Unknown}
         }
     }
@@ -571,7 +574,7 @@ impl CommandQueue {
                 let pages_pa = allocated_pages.ok_or("No pages were passed to the create EQ command")?;
 
                 cmdq_entry.set_input_length_in_bytes((0x110 + pages_pa.len()*8) as u32);
-                cmdq_entry.set_output_length_in_bytes(12);
+                cmdq_entry.set_output_length_in_bytes(16);
                 cmdq_entry.set_input_inline_data(opcode, op_mod, None, None);
                 
                 self.create_page_request_event_queue(
@@ -602,11 +605,6 @@ impl CommandQueue {
                 cmdq_entry.set_input_inline_data(opcode, op_mod, None, None);
             },
             CommandOpcode::AllocTransportDomain => { 
-                cmdq_entry.set_input_length_in_bytes(8);
-                cmdq_entry.set_output_length_in_bytes(12);
-                cmdq_entry.set_input_inline_data(opcode, op_mod, None, None);
-            },
-            CommandOpcode::QuerySpecialContexts => { 
                 cmdq_entry.set_input_length_in_bytes(8);
                 cmdq_entry.set_output_length_in_bytes(12);
                 cmdq_entry.set_input_inline_data(opcode, op_mod, None, None);
@@ -744,9 +742,9 @@ impl CommandQueue {
 
                 // initialize the bitmask. this function only activates the page request event
                 let bitmask_offset_in_mailbox  = 0x58 - 0x10;
-                let eq_bitmask = mb_page.as_type_mut::<u64>(bitmask_offset_in_mailbox)?;
+                let eq_bitmask = mb_page.as_type_mut::<U64<BigEndian>>(bitmask_offset_in_mailbox)?;
                 const PAGE_REQUEST_BIT: u64 = 1 << 0xB;
-                *eq_bitmask = PAGE_REQUEST_BIT;
+                *eq_bitmask = U64::new(PAGE_REQUEST_BIT);
 
                 // Now use the remainder of the mailbox for page entries
                 let eq_pa_offset = 0x110 - 0x10;
@@ -991,7 +989,7 @@ impl WorkQueue {
     }
 }
 
-#[derive(FromBytes)]
+#[derive(FromBytes, Default)]
 #[repr(C)]
 struct EventQueueContext {
     status:             Volatile<U32<BigEndian>>,
@@ -1001,20 +999,22 @@ struct EventQueueContext {
     _padding2:          ReadOnly<u32>,
     intr:               Volatile<U32<BigEndian>>,
     log_pg_size:        Volatile<U32<BigEndian>>,
-    _padding3:          ReadOnly<u64>,
+    _padding3:          [u32;3],
     consumer_counter:   Volatile<U32<BigEndian>>,
     producer_counter:   Volatile<U32<BigEndian>>,
-    _padding4:          ReadOnly<[u8;12]>,
+    _padding4:          ReadOnly<[u8;16]>,
 }
 
 const_assert_eq!(core::mem::size_of::<EventQueueContext>(), 64);
 
 impl EventQueueContext {
     pub fn init(&mut self, uar_page: u32, log_eq_size: u8) {
+        *self = EventQueueContext::default();
         let uar = uar_page & 0xFF_FFFF;
         let size = ((log_eq_size & 0x1F) as u32) << 24;
+        self.status.write(U32::new(0x9 << 8));
         self.uar_log_eq_size.write(U32::new(uar | size));
-        self.log_pg_size.write(U32::new(0));
+        self.log_pg_size.write(U32::new(2 << 24));
     }
 }
 

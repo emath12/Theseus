@@ -174,7 +174,7 @@ impl ConnectX5Nic {
         for _ in 0..num_boot_pages {
             let (page, pa) = create_contiguous_mapping(4096, NIC_MAPPING_FLAGS)?;
             boot_mp.push(page);
-            error!("pa: {:#X}", pa.value());
+            // error!("pa: {:#X}", pa.value());
             boot_pa.push(pa);
         }
         let cmdq_entry = cmdq.create_command(CommandOpcode::ManagePages, Some(ManagePagesOpmod::AllocationSuccess as u16), Some(boot_pa), None, None)?;
@@ -195,7 +195,7 @@ impl ConnectX5Nic {
             for _ in 0..num_init_pages {
                 let (page, pa) = create_contiguous_mapping(4096, NIC_MAPPING_FLAGS)?;
                 boot_mp.push(page);
-                error!("pa: {:#X}", pa.value());
+                // error!("pa: {:#X}", pa.value());
                 boot_pa.push(pa);
             }
             let cmdq_entry = cmdq.create_command(CommandOpcode::ManagePages, Some(ManagePagesOpmod::AllocationSuccess as u16), Some(boot_pa), None, None)?;
@@ -224,7 +224,7 @@ impl ConnectX5Nic {
             for _ in 0..num_regular_pages {
                 let (page, pa) = create_contiguous_mapping(4096, NIC_MAPPING_FLAGS)?;
                 boot_mp.push(page);
-                error!("pa: {:#X}", pa.value());
+                // error!("pa: {:#X}", pa.value());
                 boot_pa.push(pa);
             }
             let cmdq_entry = cmdq.create_command(CommandOpcode::ManagePages, Some(ManagePagesOpmod::AllocationSuccess as u16), Some(boot_pa), None, None)?;
@@ -244,13 +244,13 @@ impl ConnectX5Nic {
 
         // create EQ for a Page Request Event
         // Allocate pages for EQ
-        let num_eq_pages = 1;
+        let num_eq_pages = 2;
         let mut eq_mp = Vec::with_capacity(num_eq_pages as usize);
         let mut eq_pa = Vec::with_capacity(num_eq_pages as usize);
         for _ in 0..num_eq_pages {
             let (page, pa) = create_contiguous_mapping(4096, NIC_MAPPING_FLAGS)?;
             eq_mp.push(page);
-            error!("pa: {:#X}", pa.value());
+            // error!("pa: {:#X}", pa.value());
             eq_pa.push(pa);
         }
         let cmdq_entry = cmdq.create_command(CommandOpcode::CreateEq, None, Some(eq_pa), Some(uar), Some(7))?;
