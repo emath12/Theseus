@@ -41,7 +41,7 @@ use kernel_config::memory::PAGE_SIZE;
 use owning_ref::BoxRefMut;
 use interrupts::{eoi,register_interrupt};
 use x86_64::structures::idt::{ExceptionStackFrame};
-use network_interface_card:: NetworkInterfaceCard;
+use network_interface_card:: {NetworkInterfaceCard, NetworkInterfaceCard2};
 use nic_initialization::{allocate_memory, init_rx_buf_pool, init_rx_queue, init_tx_queue};
 use intel_ethernet::descriptors::{LegacyRxDescriptor, LegacyTxDescriptor};
 use nic_buffers::{TransmitBuffer, ReceiveBuffer, ReceivedFrame};
@@ -168,6 +168,21 @@ impl NetworkInterfaceCard for E1000Nic {
         self.mac_spoofed.unwrap_or(self.mac_hardware)
     }
 }
+
+impl NetworkInterfaceCard2 for E1000Nic {
+
+    fn send_packet(&mut self, transmit_buffer: SWOwnedBuffer) ->  HWOwnedBuffer {
+        /*** 
+        IOMMU operations 
+        ***/
+
+        self.tx_queue.tx_descs[self.tx_cur].send(transmit_buffer.phys_addr, transmit_buffer.length);  
+        transmit_buffer.transfer_ownership(self.tx_cur)
+    }
+
+    fn reclaim_packet(&mut self, transmit_buffer: HWOwnedBuffer) -> SWOwnedBuffer {...}
+}
+
 
 
 

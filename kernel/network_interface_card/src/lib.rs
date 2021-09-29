@@ -1,8 +1,10 @@
 #![no_std]
 
 extern crate nic_buffers;
+extern crate dma_buffers;
 
 use nic_buffers::{TransmitBuffer, ReceivedFrame};
+use dma_buffers::{SWOwnedBuffer, HWOwnedBuffer};
 
 
 /// A trait that defines the necessary minimum functions that all network interface card (NIC) drivers
@@ -24,4 +26,11 @@ pub trait NetworkInterfaceCard {
     /// If spoofed, it will return the spoofed MAC address, 
     /// otherwise it will return the regular MAC address defined by the NIC hardware.
     fn mac_address(&self) -> [u8; 6];
+}
+
+pub trait NetworkInterfaceCard2 {
+    /// Sends a packet contained in the given `transmit_buffer` out through this NetworkInterfaceCard. 
+    fn send_packet(&mut self, transmit_buffer: SWOwnedBuffer) -> HWOwnedBuffer;
+
+    fn reclaim_packet(&mut self, transmit_buffer: HWOwnedBuffer) -> SWOwnedBuffer;
 }

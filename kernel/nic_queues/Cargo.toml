@@ -20,6 +20,9 @@ path = "../intel_ethernet"
 [dependencies.nic_buffers]
 path = "../nic_buffers"
 
+[dependencies.dma_buffers]
+path = "../dma_buffers"
+
 [dependencies.mpmc]
 path = "../../libs/mpmc"
 

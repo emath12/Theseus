@@ -14,6 +14,7 @@ extern crate memory;
 extern crate intel_ethernet;
 extern crate nic_buffers;
 extern crate owning_ref;
+extern crate dma_buffers;
 
 use owning_ref::BoxRefMut;
 use alloc::{
@@ -23,6 +24,7 @@ use alloc::{
 use memory::{MappedPages, create_contiguous_mapping, EntryFlags};
 use intel_ethernet::descriptors::{RxDescriptor, TxDescriptor};
 use nic_buffers::{ReceiveBuffer, ReceivedFrame, TransmitBuffer};
+use dma_buffers::{SWOwnedBuffer, HWOwnedBuffer};
 
 /// The mapping flags used for pages that the NIC will map.
 pub const NIC_MAPPING_FLAGS: EntryFlags = EntryFlags::from_bits_truncate(

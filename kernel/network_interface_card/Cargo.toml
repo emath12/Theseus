@@ -10,5 +10,9 @@ build = "../../build.rs"
 [dependencies.nic_buffers]
 path = "../nic_buffers"
 
+
+[dependencies.dma_buffers]
+path = "../dma_buffers"
+
 [lib]
 crate-type = ["rlib"]
