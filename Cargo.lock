@@ -683,6 +683,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "dma_buffers"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "memory",
+ "mpmc",
+ "owning_ref",
+]
+
+[[package]]
 name = "dmar"
 version = "0.1.0"
 dependencies = [
@@ -1767,6 +1777,7 @@ dependencies = [
 name = "network_interface_card"
 version = "0.1.0"
 dependencies = [
+ "dma_buffers",
  "nic_buffers",
 ]
 
@@ -1820,6 +1831,7 @@ dependencies = [
 name = "nic_queues"
 version = "0.1.0"
 dependencies = [
+ "dma_buffers",
  "intel_ethernet",
  "log",
  "memory",
