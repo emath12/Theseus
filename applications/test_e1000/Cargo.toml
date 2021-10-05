@@ -1,5 +1,5 @@
 [package]
-name = "test_ixgbe"
+name = "test_e1000"
 version = "0.1.0"
 authors = ["Ramla Ijaz <ijazramla@gmail.com>"]
 build = "../../build.rs"
@@ -12,11 +12,14 @@ version = "0.4.8"
 [dependencies.terminal_print]
 path = "../../kernel/terminal_print"
 
-[dependencies.ixgbe]
-path = "../../kernel/ixgbe"
+[dependencies.e1000]
+path = "../../kernel/e1000"
 
 [dependencies.spawn]
 path = "../../kernel/spawn"
+
+[dependencies.dma_buffers]
+path = "../../kernel/dma_buffers"
 
 [dependencies.network_interface_card]
 path = "../../kernel/network_interface_card"

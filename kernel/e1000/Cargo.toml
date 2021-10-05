@@ -54,5 +54,8 @@ path = "../nic_queues"
 [dependencies.nic_initialization]
 path = "../nic_initialization"
 
+[dependencies.dma_buffers]
+path = "../dma_buffers"
+
 [lib]
 crate-type = ["rlib"]

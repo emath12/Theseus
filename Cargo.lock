@@ -644,7 +644,6 @@ dependencies = [
  "fatfs",
  "io",
  "iommu",
- "ixgbe",
  "keyboard",
  "log",
  "logger",
@@ -714,6 +713,7 @@ checksum = "9ea835d29036a4087793836fa931b08837ad5e957da9e23886b29586fb9b6650"
 name = "e1000"
 version = "0.1.0"
 dependencies = [
+ "dma_buffers",
  "intel_ethernet",
  "interrupts",
  "irq_safety",
@@ -1215,42 +1215,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0d47946d458e94a1b7bcabbf6521ea7c037062c81f534615abcad76e84d4970d"
 dependencies = [
  "either",
-]
-
-[[package]]
-name = "ixgbe"
-version = "0.1.0"
-dependencies = [
- "acpi",
- "apic",
- "bit_field 0.7.0",
- "hashbrown",
- "hpet",
- "intel_ethernet",
- "interrupts",
- "irq_safety",
- "kernel_config",
- "lazy_static",
- "log",
- "memory",
- "mpmc",
- "network_interface_card",
- "nic_buffers",
- "nic_initialization",
- "nic_queues",
- "owning_ref",
- "pci",
- "physical_nic",
- "pic",
- "pit_clock",
- "rand",
- "runqueue",
- "spin 0.9.0",
- "static_assertions",
- "virtual_nic",
- "volatile",
- "x86_64",
- "zerocopy",
 ]
 
 [[package]]
@@ -2926,6 +2890,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "test_e1000"
+version = "0.1.0"
+dependencies = [
+ "dma_buffers",
+ "e1000",
+ "log",
+ "network_interface_card",
+ "spawn",
+ "terminal_print",
+]
+
+[[package]]
 name = "test_panic"
 version = "0.1.0"
 dependencies = [
@@ -3131,18 +3107,6 @@ dependencies = [
  "logger",
  "spin 0.9.0",
  "volatile",
-]
-
-[[package]]
-name = "virtual_nic"
-version = "0.1.0"
-dependencies = [
- "intel_ethernet",
- "irq_safety",
- "network_interface_card",
- "nic_buffers",
- "nic_queues",
- "physical_nic",
 ]
 
 [[package]]

@@ -21,10 +21,10 @@ use alloc::{
     vec::Vec,
     collections::VecDeque
 };
-use memory::{MappedPages, create_contiguous_mapping, EntryFlags};
+use memory::{MappedPages, create_contiguous_mapping, EntryFlags, PhysicalAddress};
 use intel_ethernet::descriptors::{RxDescriptor, TxDescriptor};
 use nic_buffers::{ReceiveBuffer, ReceivedFrame, TransmitBuffer};
-use dma_buffers::{SWOwnedBuffer, HWOwnedBuffer};
+use dma_buffers::{Buffer, State};
 
 /// The mapping flags used for pages that the NIC will map.
 pub const NIC_MAPPING_FLAGS: EntryFlags = EntryFlags::from_bits_truncate(
@@ -33,6 +33,9 @@ pub const NIC_MAPPING_FLAGS: EntryFlags = EntryFlags::from_bits_truncate(
     EntryFlags::NO_CACHE.bits() |
     EntryFlags::NO_EXECUTE.bits()
 );
+
+/// The number of used descriptors in the TX queue before packets are reclaimed.
+const TX_CLEAN_BATCH: usize = 32;
 
 /// The register trait that gives access to only those registers required for receiving a packet.
 /// The Rx queue control registers can only be accessed by the physical NIC.
@@ -161,26 +164,89 @@ pub struct TxQueue<S: TxQueueRegisters, T: TxDescriptor> {
     pub num_tx_descs: u16,
     /// Current transmit descriptor index
     pub tx_cur: u16,
+    /// The first transmit descriptor index that is used
+    pub tx_clean: u16,
     /// The cpu which this queue is mapped to. 
     /// This in itself doesn't guarantee anything but we use this value when setting the cpu id for interrupts and DCA.
-    pub cpu_id : Option<u8>
+    pub cpu_id : Option<u8>,
+    /// The list of tx buffers in use, the buffer at index 0 corresponds to the buffer being sent in `tx_descs[tx_clean]`
+    pub tx_bufs_in_use: Vec<Buffer<{State::HWOwned}>>,
 }
 
 impl<S: TxQueueRegisters, T: TxDescriptor> TxQueue<S,T> {
-    /// Sends a packet on the transmit queue
+
+    /// Sends a packet on the transmit queue.
     /// 
     /// # Arguments:
     /// * `transmit_buffer`: buffer containing the packet to be sent
-    pub fn send_on_queue(&mut self, transmit_buffer: TransmitBuffer) {
-        self.tx_descs[self.tx_cur as usize].send(transmit_buffer.phys_addr, transmit_buffer.length);  
+    pub fn send(&mut self, transmit_buffer_addr: PhysicalAddress, transmit_buffer_length: u16) {
+        self.tx_descs[self.tx_cur as usize].send(transmit_buffer_addr, transmit_buffer_length);  
         // update the tx_cur value to hold the next free descriptor
-        let old_cur = self.tx_cur;
         self.tx_cur = (self.tx_cur + 1) % self.num_tx_descs;
         // update the tdt register by 1 so that it knows the previous descriptor has been used
         // and has a packet to be sent
         self.regs.set_tdt(self.tx_cur as u32);
         // Wait for the packet to be sent
+    }
+
+    /// Sends a packet on the transmit queue and then waits for transmission to complete.
+    /// 
+    /// # Arguments:
+    /// * `transmit_buffer`: buffer containing the packet to be sent
+    pub fn send_on_queue_and_wait(&mut self, transmit_buffer: TransmitBuffer) {
+        let old_cur = self.tx_cur;
+        // Update the descriptor to actually send the packet
+        self.send(transmit_buffer.phys_addr, transmit_buffer.length as u16);
+        // Wait for the packet to be sent
         self.tx_descs[old_cur as usize].wait_for_packet_tx();
+    }
+
+    /// Sends a packet on the transmit queue and also reclaims transmit packet buffers that are no longer in use.
+    /// 
+    /// # Arguments:
+    /// * `transmit_buffer`: buffer containing the packet to be sent
+    pub fn send_on_queue_and_reclaim(&mut self, transmit_buffer: Buffer<{State::SWOwned}>) {
+        // Reclaim packet buffers that are no longer in use
+        self.reclaim();
+        // Update the descriptor to actually send the packet
+        self.send(transmit_buffer.phys_addr, transmit_buffer.length as u16);
+        // Add the buffer that was just sent to the list of in-use buffers
+        self.tx_bufs_in_use.push(transmit_buffer.transfer_ownership());
+    }
+
+    fn reclaim(&mut self) {
+        let mut clean_index = self.tx_clean;
+        loop {
+            let mut cleanable = self.tx_cur as i32 - clean_index as i32;
+            
+            if cleanable < 0 {
+                cleanable += self.num_tx_descs as i32;
+            }
+            
+            if cleanable < TX_CLEAN_BATCH as i32 {
+                break;
+            }
+            
+            let mut cleanup_to = clean_index as usize + TX_CLEAN_BATCH - 1;
+            
+            if cleanup_to >= self.num_tx_descs as usize {
+                cleanup_to -= self.num_tx_descs as usize;
+            }
+            if self.tx_descs[cleanup_to].packet_sent() {
+                debug!("Cleaning packets {} to {}, tx_cur: {}", clean_index, cleanup_to, self.tx_cur);
+                if TX_CLEAN_BATCH >= self.tx_bufs_in_use.len() {
+                    core::mem::drop(self.tx_bufs_in_use.drain(..).map(|buffer| buffer.transfer_ownership()));
+                } else {
+                    core::mem::drop(self.tx_bufs_in_use.drain(..).map(|buffer| buffer.transfer_ownership()));
+                }
+                clean_index = (cleanup_to as u16 + 1) & (self.num_tx_descs - 1);
+                
+            } else {
+                break;
+            }
+        }
+
+        self.tx_clean = clean_index;
     }
 }
 

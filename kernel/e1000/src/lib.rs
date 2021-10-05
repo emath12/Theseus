@@ -25,6 +25,7 @@ extern crate intel_ethernet;
 extern crate nic_buffers;
 extern crate nic_queues;
 extern crate nic_initialization;
+extern crate dma_buffers;
 
 pub mod test_e1000_driver;
 mod regs;
@@ -41,17 +42,18 @@ use kernel_config::memory::PAGE_SIZE;
 use owning_ref::BoxRefMut;
 use interrupts::{eoi,register_interrupt};
 use x86_64::structures::idt::{ExceptionStackFrame};
-use network_interface_card:: {NetworkInterfaceCard, NetworkInterfaceCard2};
+use network_interface_card:: NetworkInterfaceCard;
 use nic_initialization::{allocate_memory, init_rx_buf_pool, init_rx_queue, init_tx_queue};
 use intel_ethernet::descriptors::{LegacyRxDescriptor, LegacyTxDescriptor};
 use nic_buffers::{TransmitBuffer, ReceiveBuffer, ReceivedFrame};
 use nic_queues::{RxQueue, TxQueue, RxQueueRegisters, TxQueueRegisters};
+use dma_buffers::{Buffer, State};
 
 pub const INTEL_VEND:           u16 = 0x8086;  // Vendor ID for Intel 
 pub const E1000_DEV:            u16 = 0x100E;  // Device ID for the e1000 Qemu, Bochs, and VirtualBox emmulated NICs
 
-const E1000_NUM_RX_DESC:        u16 = 8;
-const E1000_NUM_TX_DESC:        u16 = 8;
+const E1000_NUM_RX_DESC:        u16 = 128;
+const E1000_NUM_TX_DESC:        u16 = 128;
 
 /// Currently, each receive buffer is a single page.
 const E1000_RX_BUFFER_SIZE_IN_BYTES:     u16 = PAGE_SIZE as u16;
@@ -152,7 +154,12 @@ pub struct E1000Nic {
 impl NetworkInterfaceCard for E1000Nic {
 
     fn send_packet(&mut self, transmit_buffer: TransmitBuffer) -> Result<(), &'static str> {
-        self.tx_queue.send_on_queue(transmit_buffer);
+        self.tx_queue.send_on_queue_and_wait(transmit_buffer);
+        Ok(())
+    }
+
+    fn send_packet_and_reclaim(&mut self, transmit_buffer: Buffer<{State::SWOwned}>) -> Result<(), &'static str> {
+        self.tx_queue.send_on_queue_and_reclaim(transmit_buffer);
         Ok(())
     }
 
@@ -168,21 +175,6 @@ impl NetworkInterfaceCard for E1000Nic {
         self.mac_spoofed.unwrap_or(self.mac_hardware)
     }
 }
-
-impl NetworkInterfaceCard2 for E1000Nic {
-
-    fn send_packet(&mut self, transmit_buffer: SWOwnedBuffer) ->  HWOwnedBuffer {
-        /*** 
-        IOMMU operations 
-        ***/
-
-        self.tx_queue.tx_descs[self.tx_cur].send(transmit_buffer.phys_addr, transmit_buffer.length);  
-        transmit_buffer.transfer_ownership(self.tx_cur)
-    }
-
-    fn reclaim_packet(&mut self, transmit_buffer: HWOwnedBuffer) -> SWOwnedBuffer {...}
-}
-
 
 
 
@@ -256,7 +248,9 @@ impl E1000Nic {
             tx_descs: tx_descs,
             num_tx_descs: E1000_NUM_TX_DESC,
             tx_cur: 0,
+            tx_clean: 0,
             cpu_id: None,
+            tx_bufs_in_use: Vec::with_capacity(E1000_NUM_TX_DESC as usize)
         };
 
         let e1000_nic = E1000Nic {

@@ -60,8 +60,8 @@ path = "../network_manager"
 [dependencies.ethernet_smoltcp_device]
 path = "../ethernet_smoltcp_device"
 
-[dependencies.ixgbe]
-path = "../ixgbe"
+# [dependencies.ixgbe]
+# path = "../ixgbe"
 
 [dependencies.io]
 path = "../io"
