@@ -47,6 +47,7 @@ extern crate crossbeam_utils;
 
 
 use core::fmt;
+use core::hash::{Hash, Hasher};
 use core::sync::atomic::{Ordering, AtomicUsize};
 use core::any::Any;
 use core::panic::PanicInfo;
@@ -65,7 +66,7 @@ use kernel_config::memory::KERNEL_STACK_SIZE_IN_PAGES;
 use mod_mgmt::{AppCrateRef, CrateNamespace, TlsDataImage};
 use environment::Environment;
 use spin::Mutex;
-use x86_64::registers::msr::{IA32_FS_BASE, IA32_GS_BASE, rdmsr, wrmsr};
+use x86_64::registers::model_specific::{GsBase, FsBase};
 
 
 /// The function signature of the callback that will be invoked
@@ -353,6 +354,12 @@ impl fmt::Debug for Task {
     }
 }
 
+impl Hash for Task {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        self.id.hash(h);
+    }
+}
+
 impl Task {
     /// Creates a new Task structure and initializes it to be non-Runnable.
     /// By default, the new `Task` will inherit some of the same states from the currently-running `Task`:
@@ -630,21 +637,18 @@ impl Task {
     /// 
     /// Currently this is achieved by writing a pointer to the `TaskLocalData` 
     /// into the `GS_BASE` register.
+    /// This also updates the current TLS region, which is stored in `FS_BASE`.
     ///
     /// # Locking / Deadlock
     /// Obtains the lock on this `Task`'s inner state in order to access it. 
     fn set_as_current_task(&self) {
-        unsafe {
-            wrmsr(IA32_FS_BASE, self.tls_area.pointer_value() as u64);
-        }
+        FsBase::write(x86_64::VirtAddr::new(self.tls_area.pointer_value() as u64));
 
         // TODO: now that proper ELF TLS areas are supported, 
         //       use that TLS area for the `TaskLocalData` instead of `GS_BASE`. 
 
         if let Some(ref tld) = self.inner.lock().task_local_data {
-            unsafe {
-                wrmsr(IA32_GS_BASE, tld.deref() as *const _ as u64);
-            }
+            GsBase::write(x86_64::VirtAddr::new(tld.deref() as *const _ as u64));
         } else {
             error!("BUG: failed to set current task, it had no TaskLocalData. {:?}", self);
         }
@@ -856,7 +860,7 @@ impl fmt::Display for Task {
 /// two `TaskRef`s are considered equal if they point to the same underlying `Task`.
 /// 
 /// `TaskRef` also auto-derefs into an immutable `Task` reference.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash)]
 pub struct TaskRef(Arc<Task>);
 
 impl TaskRef {
@@ -1114,7 +1118,7 @@ struct TaskLocalData {
 /// by using the `TaskLocalData` pointer stored in the `GS_BASE` register.
 fn get_task_local_data() -> Option<&'static TaskLocalData> {
     let tld: &'static TaskLocalData = {
-        let tld_ptr = rdmsr(IA32_GS_BASE) as *const TaskLocalData;
+        let tld_ptr = GsBase::read().as_u64() as *const TaskLocalData;
         if tld_ptr.is_null() {
             return None;
         }
