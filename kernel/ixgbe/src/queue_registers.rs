@@ -3,7 +3,7 @@
 //! They implement the `RxQueueRegisters` and `TxQueueRegisters` traits which allows 
 //! the registers to be accessed through virtual NICs
 
-use super::regs::{RegistersRx, RegistersTx};
+use super::regs_hw_model::{RegistersRx, RegistersTx};
 use alloc::{
     sync::Arc,
     boxed::Box

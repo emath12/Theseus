@@ -43,11 +43,11 @@ extern crate virtual_nic;
 extern crate zerocopy;
 extern crate hashbrown;
 
-mod regs_hw_model;
+mod regs;
 mod queue_registers;
 pub mod virtual_function;
 pub mod test_packets;
-use regs_hw_model::*;
+use regs::*;
 use queue_registers::*;
 
 use spin::Once;
@@ -677,11 +677,12 @@ impl IxgbeNic {
         link_speed: LinkSpeedMbps
     ) -> Result<(), &'static str> {
         //disable interrupts: write to EIMC registers, 1 in b30-b0, b31 is reserved
-        regs1.eimc_disable_interrupts();
+        regs1.eimc.write(DISABLE_INTERRUPTS);
 
         // master disable algorithm (sec 5.2.5.3.2)
         // global reset = sw reset + link reset 
-        regs1.ctrl_reset();
+        let val = regs1.ctrl.read();
+        regs1.ctrl.write(val|CTRL_RST|CTRL_LRST);
 
         //wait 10 ms
         let wait_time = 10_000;
@@ -692,13 +693,19 @@ impl IxgbeNic {
             fcttv.write(0);
         }
 
-        regs2.fcrtl_clear();
-        regs2.fcrth_clear();
-        regs2.fcrtv_clear();
-        regs2.fccfg_clear();
+        for fcrtl in regs2.fcrtl.iter_mut() {
+            fcrtl.write(0);
+        }
+
+        for fcrth in regs2.fcrth.iter_mut() {
+            fcrth.write(0);
+        }
+
+        regs2.fcrtv.write(0);
+        regs2.fccfg.write(0);
 
         //disable interrupts
-        regs1.eimc_disable_interrupts();
+        regs1.eims.write(DISABLE_INTERRUPTS);
 
         //wait for eeprom auto read completion
         while !regs3.eec.read().get_bit(EEC_AUTO_RD as u8){}
@@ -708,10 +715,10 @@ impl IxgbeNic {
         debug!("Ixgbe: MAC address high: {:#X}", regs_mac.rah.read() & 0xFFFF);
 
         //wait for dma initialization done (RDRXCTL.DMAIDONE)
-        let mut val = regs2.rdrxctl_read();
+        let mut val = regs2.rdrxctl.read();
         let dmaidone_bit = 1 << 3;
         while val & dmaidone_bit != dmaidone_bit {
-            val = regs2.rdrxctl_read();
+            val = regs2.rdrxctl.read();
         }
 
         while Self::acquire_semaphore(regs3)? {
@@ -733,8 +740,8 @@ impl IxgbeNic {
                 let val = regs2.autoc.read() & !(AUTOC_10G_PMA_PMD_CLEAR);
                 regs2.autoc.write(val | AUTOC_10G_PMA_PMD_XAUI); // value should be 0xC09C_6004 (as seen from Linux driver)
 
-                let val = regs2.autoc2_read() & !(AUTOC2_10G_PMA_PMD_S_CLEAR);
-                regs2.autoc2_write(val | AUTOC2_10G_PMA_PMD_S_SFI)?; // value should be 0xA_0000 (as seen from Linux driver)
+                let val = regs2.autoc2.read() & !(AUTOC2_10G_PMA_PMD_S_CLEAR);
+                regs2.autoc2.write(val | AUTOC2_10G_PMA_PMD_S_SFI); // value should be 0xA_0000 (as seen from Linux driver)
             }
             _ => {
                 return Err("Invalid link speed");
@@ -818,14 +825,15 @@ impl IxgbeNic {
 
         Self::disable_rx_function(regs);
         // program RXPBSIZE according to DCB and virtualization modes (both off)
-        regs.rxpbsize_set_buffer_size(0, RXPBSIZE_512KB)?;
+        regs.rxpbsize[0].write(RXPBSIZE_512KB);
         for i in 1..8 {
-            regs.rxpbsize_set_buffer_size(i, 0)?;
+            regs.rxpbsize[i].write(0);
         }
-
         //CRC offloading
-        regs.hlreg0_crc_strip();
-        regs.rdrxctl_crc_strip();
+        regs.hlreg0.write(regs.hlreg0.read() | HLREG0_CRC_STRIP);
+        regs.rdrxctl.write(regs.rdrxctl.read() | RDRXCTL_CRC_STRIP);
+        // Clear bits
+        regs.rdrxctl.write(regs.rdrxctl.read() & !RDRXCTL_RSCFRSTSIZE);
 
         for qid in 0..IXGBE_NUM_RX_QUEUES_ENABLED {
             let rxq = &mut rx_regs[qid as usize];        
@@ -861,26 +869,28 @@ impl IxgbeNic {
             rx_bufs_in_use_all_queues.push(rx_bufs_in_use);
         }
         
-        Self::enable_rx_function(regs1,regs)?;
+        Self::enable_rx_function(regs1,regs);
         Ok((rx_descs_all_queues, rx_bufs_in_use_all_queues))
     }
 
     /// disable receive functionality
     fn disable_rx_function(regs: &mut IntelIxgbeRegisters2) {        
-        regs.rxctrl_rx_disable(); 
+        let val = regs.rxctrl.read();
+        regs.rxctrl.write(val & !RECEIVE_ENABLE); 
     }
 
     /// enable receive functionality
-    fn enable_rx_function(regs1: &mut IntelIxgbeRegisters1,regs: &mut IntelIxgbeRegisters2) -> Result<(), &'static str>{
+    fn enable_rx_function(regs1: &mut IntelIxgbeRegisters1,regs: &mut IntelIxgbeRegisters2) {
         // set rx parameters of which type of packets are accepted by the nic
         // right now we allow the nic to receive all types of packets, even incorrectly formed ones
-        regs.fctrl_write(STORE_BAD_PACKETS | MULTICAST_PROMISCUOUS_ENABLE | UNICAST_PROMISCUOUS_ENABLE | BROADCAST_ACCEPT_MODE)?; 
+        regs.fctrl.write(STORE_BAD_PACKETS | MULTICAST_PROMISCUOUS_ENABLE | UNICAST_PROMISCUOUS_ENABLE | BROADCAST_ACCEPT_MODE); 
         
-        regs1.ctrl_ext_no_snoop_disable();
+        // some magic numbers
+        regs1.ctrl_ext.write(regs1.ctrl_ext.read() | CTRL_EXT_NO_SNOOP_DIS);
 
         // enable receive functionality
-        regs.rxctrl_rx_enable(); 
-        Ok(())
+        let val = regs.rxctrl.read();
+        regs.rxctrl.write(val | RECEIVE_ENABLE); 
     }
 
     /// Initialize the array of transmit descriptors for all queues and returns them.
@@ -892,14 +902,13 @@ impl IxgbeNic {
         num_tx_descs: u16
     ) -> Result<Vec<BoxRefMut<MappedPages, [AdvancedTxDescriptor]>>, &'static str> {
         // disable transmission
-        regs.dmatxctl_disable_tx();
+        Self::disable_transmission(regs);
 
         // CRC offload and small packet padding enable
-        regs.hlreg0_crc_en();
-        regs.hlreg0_tx_pad_en();
+        regs.hlreg0.write(regs.hlreg0.read() | HLREG0_TXCRCEN | HLREG0_TXPADEN);
 
         // Set RTTFCS.ARBDIS to 1
-        regs.rttdcs_set_arbdis();
+        regs.rttdcs.write(regs.rttdcs.read() | RTTDCS_ARBDIS);
 
         // program DTXMXSZRQ and TXPBSIZE according to DCB and virtualization modes (both off)
         regs_mac.txpbsize[0].write(TXPBSIZE_160KB);
@@ -909,7 +918,7 @@ impl IxgbeNic {
         regs_mac.dtxmxszrq.write(DTXMXSZRQ_MAX_BYTES); 
 
         // Clear RTTFCS.ARBDIS
-        regs.rttdcs_clear_arbdis();
+        regs.rttdcs.write(regs.rttdcs.read() & !RTTDCS_ARBDIS);
 
         let mut tx_descs_all_queues = Vec::new();
         
@@ -920,7 +929,7 @@ impl IxgbeNic {
         
             if qid == 0 {
                 // enable transmit operation, only have to do this for the first queue
-                regs.dmatxctl_enable_tx();
+                Self::enable_transmission(regs);
             }
 
             // Set descriptor thresholds
@@ -940,6 +949,18 @@ impl IxgbeNic {
         Ok(tx_descs_all_queues)
     }  
 
+    /// disable transmit functionality
+    fn disable_transmission(regs: &mut IntelIxgbeRegisters2) {
+        let val = regs.dmatxctl.read();
+        regs.dmatxctl.write(val & !TE); 
+    }
+
+    /// enable transmit functionality
+    fn enable_transmission(regs: &mut IntelIxgbeRegisters2) {
+        let val = regs.dmatxctl.read();
+        regs.dmatxctl.write(val | TE); 
+    }
+
     /// Enable multiple receive queues with RSS.
     /// Part of queue initialization is done in the rx_init function.
     fn enable_rss(
@@ -947,7 +968,7 @@ impl IxgbeNic {
         regs3: &mut IntelIxgbeRegisters3
     ) -> Result<(), &'static str> {
         // enable RSS writeback in the header field of the receive descriptor
-        regs2.rxcsum_enable_rss_writeback();
+        regs2.rxcsum.write(RXCSUM_PCSD);
         
         // enable RSS and set fields that will be used by hash function
         // right now we're using the udp port and ipv4 address.
@@ -1132,14 +1153,15 @@ impl IxgbeNic {
                 // otherwise we'll write to the upper 16 bits
                 // need to OR with previous value so that we don't write over a previous queue that's been enabled
                 else {
-                    ((enable_interrupt_rx | queue) << 16) as u32 | regs.ivar_read(queue / queues_per_ivar_reg)
+                    ((enable_interrupt_rx | queue) << 16) as u32 | regs.ivar[queue / queues_per_ivar_reg].read()
                 };
-            regs.ivar_write(queue / queues_per_ivar_reg, int_enable)?; 
+            regs.ivar[queue / queues_per_ivar_reg].write(int_enable); 
             // debug!("IVAR: {:#X}", regs.ivar.reg[queue / queues_per_ivar_reg].read());
         }
         
         //enable clear on read of EICR and MSI-X mode
-        regs.gpie_enable_immediate_int_and_multiple_msix();
+        let val = regs.gpie.read();
+        regs.gpie.write(val | GPIE_EIMEN | GPIE_MULTIPLE_MSIX | GPIE_PBA_SUPPORT); 
         // debug!("GPIE: {:#X}", regs.gpie.read());
 
         // set eims bits to enable required interrupt
@@ -1148,11 +1170,11 @@ impl IxgbeNic {
         for i in 0..num_msi_vec_enabled {
             val = val | (EIMS_INTERRUPT_ENABLE << i);
         }
-        regs.eims_write(val)?; 
+        regs.eims.write(val); 
         // debug!("EIMS: {:#X}", regs.eims.read());
 
         //enable auto-clear of receive interrupts 
-        regs.eiac_enable_rtxq_autoclear();
+        regs.eiac.write(EIAC_RTXQ_AUTO_CLEAR);
 
         //clear eicr 
         let _val = regs.eicr.read();
@@ -1162,7 +1184,7 @@ impl IxgbeNic {
         // minimum interrupt interval specified in 2us units
         let interrupt_interval = 1; // 2us
         for i in 0..num_msi_vec_enabled {
-            regs.eitr_set_interval(i, interrupt_interval)?;
+            regs.eitr[i].write(interrupt_interval << EITR_ITR_INTERVAL_SHIFT);
         }
 
         let mut interrupt_nums = HashMap::with_capacity(num_msi_vec_enabled);
