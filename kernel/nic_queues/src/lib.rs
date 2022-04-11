@@ -38,8 +38,8 @@ pub trait RxQueueRegisters {
     fn set_rdbal(&mut self, value: u32);
     fn set_rdbah(&mut self, value: u32);
     fn set_rdlen(&mut self, value: u32);
-    fn set_rdh(&mut self, value: u32);
-    fn set_rdt(&mut self, value: u32);
+    fn set_rdh(&mut self, value: u16);
+    fn set_rdt(&mut self, value: u16);
 }
 
 /// The register trait that gives access to only those registers required for sending a packet.
@@ -48,8 +48,8 @@ pub trait TxQueueRegisters {
     fn set_tdbal(&mut self, value: u32);
     fn set_tdbah(&mut self, value: u32);
     fn set_tdlen(&mut self, value: u32);
-    fn set_tdh(&mut self, value: u32);
-    fn set_tdt(&mut self, value: u32);
+    fn set_tdh(&mut self, value: u16);
+    fn set_tdt(&mut self, value: u16);
 }
 
 /// A struct that holds all information for one receive queue.
@@ -125,7 +125,7 @@ impl<S: RxQueueRegisters, T: RxDescriptor> RxQueue<S,T> {
 
             // move on to the next receive buffer to see if it's ready for us to take
             self.rx_cur = (cur as u16 + 1) % self.num_rx_descs;
-            self.regs.set_rdt(cur as u32); 
+            self.regs.set_rdt(cur as u16); 
 
             if self.rx_descs[cur].end_of_packet() {
                 let buffers = core::mem::replace(&mut receive_buffers_in_frame, Vec::new());
@@ -176,7 +176,7 @@ impl<S: TxQueueRegisters, T: TxDescriptor> TxQueue<S,T> {
         self.tx_cur = (self.tx_cur + 1) % self.num_tx_descs;
         // update the tdt register by 1 so that it knows the previous descriptor has been used
         // and has a packet to be sent
-        self.regs.set_tdt(self.tx_cur as u32);
+        self.regs.set_tdt(self.tx_cur);
         // Wait for the packet to be sent
         self.tx_descs[old_cur as usize].wait_for_packet_tx();
     }

@@ -96,11 +96,11 @@ impl RxQueueRegisters for E1000RxQueueRegisters {
     fn set_rdlen(&mut self, value: u32) {
         self.0.rx_regs.rdlen.write(value); 
     }
-    fn set_rdh(&mut self, value: u32) {
-        self.0.rx_regs.rdh.write(value); 
+    fn set_rdh(&mut self, value: u16) {
+        self.0.rx_regs.rdh.write(value as u32); 
     }
-    fn set_rdt(&mut self, value: u32) {
-        self.0.rx_regs.rdt.write(value); 
+    fn set_rdt(&mut self, value: u16) {
+        self.0.rx_regs.rdt.write(value as u32); 
     }
 } 
 
@@ -118,11 +118,11 @@ impl TxQueueRegisters for E1000TxQueueRegisters {
     fn set_tdlen(&mut self, value: u32) {
         self.0.tx_regs.tdlen.write(value); 
     }
-    fn set_tdh(&mut self, value: u32) {
-        self.0.tx_regs.tdh.write(value); 
+    fn set_tdh(&mut self, value: u16) {
+        self.0.tx_regs.tdh.write(value as u32); 
     }
-    fn set_tdt(&mut self, value: u32) {
-        self.0.tx_regs.tdt.write(value); 
+    fn set_tdt(&mut self, value: u16) {
+        self.0.tx_regs.tdt.write(value as u32); 
     }
 }
 
@@ -361,7 +361,7 @@ impl E1000Nic {
         // because the `rx_cur` counter won't be able to catch up with the head index properly. 
         // Thus, we set it to one less than that in order to prevent such bugs. 
         // This doesn't prevent all of the rx buffers from being used, they will still all be used fully.
-        rx_regs.set_rdt((E1000_NUM_RX_DESC - 1) as u32); 
+        rx_regs.set_rdt(E1000_NUM_RX_DESC - 1); 
         // TODO: document these various e1000 flags and why we're setting them
         regs.rctl.write(regs::RCTL_EN| regs::RCTL_SBP | regs::RCTL_LBM_NONE | regs::RTCL_RDMTS_HALF | regs::RCTL_BAM | regs::RCTL_SECRC  | regs::RCTL_BSIZE_2048);
 

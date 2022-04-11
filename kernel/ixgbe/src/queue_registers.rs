@@ -31,13 +31,13 @@ impl RxQueueRegisters for IxgbeRxQueueRegisters {
         self.regs.rdbah.write(value)
     }
     fn set_rdlen(&mut self, value: u32) {
-        self.regs.rdlen.write(value)
+        self.regs.rdlen_write(value).unwrap(); // TODO: handle error
     }
-    fn set_rdh(&mut self, value: u32) {
-        self.regs.rdh.write(value)
+    fn set_rdh(&mut self, value: u16) {
+        self.regs.rdh_write(value)
     }
-    fn set_rdt(&mut self, value: u32) {
-        self.regs.rdt.write(value)
+    fn set_rdt(&mut self, value: u16) {
+        self.regs.rdt_write(value)
     }
 }
 impl Deref for IxgbeRxQueueRegisters {
@@ -68,13 +68,13 @@ impl TxQueueRegisters for IxgbeTxQueueRegisters {
         self.regs.tdbah.write(value)
     }
     fn set_tdlen(&mut self, value: u32) {
-        self.regs.tdlen.write(value)
+        self.regs.tdlen_write(value).unwrap(); //TODO: exit gracefully
     }
-    fn set_tdh(&mut self, value: u32) {
-        self.regs.tdh.write(value)
+    fn set_tdh(&mut self, value: u16) {
+        self.regs.tdh_write(value)
     }
-    fn set_tdt(&mut self, value: u32) {
-        self.regs.tdt.write(value)
+    fn set_tdt(&mut self, value: u16) {
+        self.regs.tdt_write(value)
     }
 }
 impl Deref for IxgbeTxQueueRegisters {

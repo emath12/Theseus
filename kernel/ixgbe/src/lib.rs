@@ -583,7 +583,7 @@ impl IxgbeNic {
         let mut timer_expired_smbi = false;
         let mut smbi_bit = 1;
         while smbi_bit != 0 {
-            smbi_bit = regs.swsm.read() & SWSM_SMBI;
+            smbi_bit = regs.swsm_read() & SWSM_SMBI;
             let end = hpet_ref.get_counter();
 
             let expiration_time = 10;
@@ -596,15 +596,14 @@ impl IxgbeNic {
 
         // check that firmware is not using the semaphore
         // 1. write to SWESMBI bit
-        let set_swesmbi = regs.swsm.read() | SWSM_SWESMBI; // set bit 1 to 1
-        regs.swsm.write(set_swesmbi);
+        regs.swsm_swesmbi_write(true);
 
         // 2. poll SWSM.SWESMBI bit until reads as 1 or 3s timer expires
         let start = hpet_ref.get_counter();
         let mut swesmbi_bit = 0;
         let mut timer_expired_swesmbi = false;
         while swesmbi_bit == 0 {
-            swesmbi_bit = (regs.swsm.read() & SWSM_SWESMBI) >> 1;
+            swesmbi_bit = (regs.swsm_read() & SWSM_SWESMBI) >> 1;
             let end = hpet_ref.get_counter();
 
             let expiration_time = 3000;
@@ -616,7 +615,7 @@ impl IxgbeNic {
 
         // software takes control of the requested resource
         // 1. read firmware and software bits of sw_fw_sync register 
-        let mut sw_fw_sync_smbits = regs.sw_fw_sync.read() & SW_FW_SYNC_SMBITS_MASK;
+        let mut sw_fw_sync_smbits = regs.sw_fw_sync_read() & SW_FW_SYNC_SMBITS_MASK;
         let sw_sync_shift = 3;
         let fw_sync_shift = 8;
         let sw_mac = (sw_fw_sync_smbits & SW_FW_SYNC_SW_MAC) >> sw_sync_shift;
@@ -632,18 +631,18 @@ impl IxgbeNic {
             sw_fw_sync_smbits &= !(SW_FW_SYNC_SMBITS_FW);
         }
 
-        regs.sw_fw_sync.write(sw_fw_sync_smbits);
+        regs.sw_fw_sync_write(sw_fw_sync_smbits)?;
 
         // check if semaphore bits for the resource are cleared
         // then resources are available
         if (sw_mac == 0) && (fw_mac == 0) {
             //claim the sw resource by setting the bit
-            let sw_fw_sync = regs.sw_fw_sync.read() & SW_FW_SYNC_SW_MAC;
-            regs.sw_fw_sync.write(sw_fw_sync);
+            let sw_fw_sync = regs.sw_fw_sync_read() & SW_FW_SYNC_SW_MAC;
+            regs.sw_fw_sync_write(sw_fw_sync)?;
 
             //clear bits in the swsm register
-            let swsm = regs.swsm.read() & !(SWSM_SMBI) & !(SWSM_SWESMBI);
-            regs.swsm.write(swsm);
+            regs.swsm_smbi_write(false);
+            regs.swsm_swesmbi_write(false);
 
             return Ok(true);
         }
@@ -651,21 +650,22 @@ impl IxgbeNic {
         //resource is not available
         else {
             //clear bits in the swsm register
-            let swsm = regs.swsm.read() & !(SWSM_SMBI) & !(SWSM_SWESMBI);
-            regs.swsm.write(swsm);
+            regs.swsm_smbi_write(false);
+            regs.swsm_swesmbi_write(false);
 
             Ok(false)
         }
     }
 
     /// Release the semaphore synchronizing between software and firmware.
-    fn release_semaphore(regs: &mut IntelIxgbeRegisters3) {
+    fn release_semaphore(regs: &mut IntelIxgbeRegisters3) -> Result<(), &'static str> {
         // clear bit of released resource
-        let sw_fw_sync = regs.sw_fw_sync.read() & !(SW_FW_SYNC_SW_MAC);
-        regs.sw_fw_sync.write(sw_fw_sync);
+        let sw_fw_sync = regs.sw_fw_sync_read() & !(SW_FW_SYNC_SW_MAC);
+        regs.sw_fw_sync_write(sw_fw_sync)?;
 
         // release semaphore
-        let _swsm = regs.swsm.read() & !(SWSM_SMBI) & !(SWSM_SWESMBI);
+        let _swsm = regs.swsm_read() & !(SWSM_SMBI) & !(SWSM_SWESMBI);
+        Ok(())
     }
 
     /// Software reset of NIC to get it running.
@@ -701,7 +701,7 @@ impl IxgbeNic {
         regs1.eimc_disable_interrupts();
 
         //wait for eeprom auto read completion
-        while !regs3.eec.read().get_bit(EEC_AUTO_RD as u8){}
+        while !regs3.eec_auto_read(){}
 
         //read MAC address
         debug!("Ixgbe: MAC address low: {:#X}", regs_mac.ral.read());
@@ -744,7 +744,7 @@ impl IxgbeNic {
         let val = regs2.autoc.read();
         regs2.autoc.write(val|AUTOC_RESTART_AN); 
 
-        Self::release_semaphore(regs3);        
+        Self::release_semaphore(regs3)?;        
 
         // debug!("STATUS: {:#X}", regs.status.read()); 
         // debug!("CTRL: {:#X}", regs.ctrl.read());
@@ -834,28 +834,27 @@ impl IxgbeNic {
             let (rx_descs, rx_bufs_in_use) = init_rx_queue(num_rx_descs as usize, &RX_BUFFER_POOL, rx_buffer_size_kbytes as usize * 1024, rxq)?;          
             
             //set the size of the packet buffers and the descriptor format used
-            let mut val = rxq.srrctl.read();
+            let mut val = rxq.srrctl_read();
             val.set_bits(0..4, rx_buffer_size_kbytes as u32);
             val.set_bits(8..13, BSIZEHEADER_0B);
             val.set_bits(25..27, DESCTYPE_ADV_1BUFFER);
             val = val | DROP_ENABLE;
-            rxq.srrctl.write(val);
+            rxq.srrctl_write(val)?;
 
             //enable the rx queue
-            let val = rxq.rxdctl.read();
-            rxq.rxdctl.write(val | RX_Q_ENABLE);
+            rxq.rxdctl_rxq_enable();
 
             //make sure queue is enabled
-            while rxq.rxdctl.read() & RX_Q_ENABLE == 0 {}
+            while rxq.rxdctl_read() & RX_Q_ENABLE == 0 {}
         
             // set bit 12 to 0
-            let val = rxq.dca_rxctrl.read();
-            rxq.dca_rxctrl.write(val & !DCA_RXCTRL_CLEAR_BIT_12);
+            let val = rxq.dca_rxctrl_read();
+            rxq.dca_rxctrl_write(val & !DCA_RXCTRL_CLEAR_BIT_12)?;
 
             // Write the tail index.
             // Note that the 82599 datasheet (section 8.2.3.8.5) states that we should set the RDT (tail index) to the index *beyond* the last receive descriptor, 
             // but we set it to the last receive descriptor for the same reason as the e1000 driver
-            rxq.rdt.write((num_rx_descs - 1) as u32);
+            rxq.rdt_write(num_rx_descs - 1);
             
             rx_descs_all_queues.push(rx_descs);
             rx_bufs_in_use_all_queues.push(rx_bufs_in_use);
@@ -902,11 +901,11 @@ impl IxgbeNic {
         regs.rttdcs_set_arbdis();
 
         // program DTXMXSZRQ and TXPBSIZE according to DCB and virtualization modes (both off)
-        regs_mac.txpbsize[0].write(TXPBSIZE_160KB);
+        regs_mac.txpbsize_write(0, TXPBSIZE_160KB)?;
         for i in 1..8 {
-            regs_mac.txpbsize[i].write(0);
+            regs_mac.txpbsize_write(i, 0)?;
         }
-        regs_mac.dtxmxszrq.write(DTXMXSZRQ_MAX_BYTES); 
+        regs_mac.dtxmxszrq_write(DTXMXSZRQ_MAX_BYTES)?; 
 
         // Clear RTTFCS.ARBDIS
         regs.rttdcs_clear_arbdis();
@@ -929,11 +928,10 @@ impl IxgbeNic {
             // txq.txdctl.write(TXDCTL_PTHRESH | TXDCTL_HTHRESH | TXDCTL_WTHRESH); 
 
             //enable tx queue
-            let val = txq.txdctl.read();
-            txq.txdctl.write(val | TX_Q_ENABLE); 
+            txq.txdctl_txq_enable(); 
 
             //make sure queue is enabled
-            while txq.txdctl.read() & TX_Q_ENABLE == 0 {} 
+            while txq.txdctl_read() & TX_Q_ENABLE == 0 {} 
 
             tx_descs_all_queues.push(tx_descs);
         }
@@ -951,7 +949,7 @@ impl IxgbeNic {
         
         // enable RSS and set fields that will be used by hash function
         // right now we're using the udp port and ipv4 address.
-        regs3.mrqc.write(MRQC_MRQE_RSS | MRQC_UDPIPV4 ); 
+        regs3.mrqc_write(MRQC_MRQE_RSS | MRQC_UDPIPV4)?; 
 
         //set the random keys for the hash function
         let seed = get_hpet().as_ref().ok_or("couldn't get HPET timer")?.get_counter();
@@ -964,10 +962,10 @@ impl IxgbeNic {
         // each reta register has 4 redirection entries
         // since mapping to queues is random and based on a hash, we randomly assign 1 queue to each reta register
         let mut qid = 0;
-        for reta in regs3.reta.iter_mut() {
+        for idx in 0..32 {
             //set 4 entries to the same queue number
             let val = qid << RETA_ENTRY_0_OFFSET | qid << RETA_ENTRY_1_OFFSET | qid << RETA_ENTRY_2_OFFSET | qid << RETA_ENTRY_3_OFFSET;
-            reta.write(val);
+            regs3.reta_write(idx, val)?;
 
             // next 4 entries will be assigned to the next queue
             qid = (qid + 1) % IXGBE_NUM_RX_QUEUES_ENABLED as u32;
@@ -986,7 +984,7 @@ impl IxgbeNic {
         // Enable DCA tagging, which writes the cpu id to the PCIe Transaction Layer Packets (TLP)
         // There are 2 version of DCA that are mentioned, legacy and 1.0
         // We always enable 1.0 since (1) currently haven't found additional info online and (2) the linux driver always enables 1.0 
-        regs.dca_ctrl.write(DCA_MODE_2 | DCA_CTRL_ENABLE);
+        regs.dca_ctrl_write(DCA_MODE_2 | DCA_CTRL_ENABLE)?;
         Self::enable_rx_dca(rxq)  
     }
 
@@ -1006,7 +1004,7 @@ impl IxgbeNic {
             // " We can enable relaxed ordering for reads, but not writes when
             //   DCA is enabled.  This is due to a known issue in some chipsets
             //   which will cause the DCA tag to be cleared."
-            rxq.regs.dca_rxctrl.write(RX_DESC_DCA_ENABLE | RX_HEADER_DCA_ENABLE | RX_PAYLOAD_DCA_ENABLE | RX_DESC_R_RELAX_ORDER_EN | (cpu_id << DCA_CPUID_SHIFT));
+            rxq.regs.dca_rxctrl_write(RX_DESC_DCA_ENABLE | RX_HEADER_DCA_ENABLE | RX_PAYLOAD_DCA_ENABLE | RX_DESC_R_RELAX_ORDER_EN | (cpu_id << DCA_CPUID_SHIFT))?;
         }
         Ok(())
     }
@@ -1084,10 +1082,10 @@ impl IxgbeNic {
 
         // write the parameters of the filter
         let filter_priority = (priority as u32 & FTQF_PRIORITY) << FTQF_PRIORITY_SHIFT;
-        self.regs3.ftqf[filter_num].write(filter_protocol as u32 | filter_priority | filter_mask | FTQF_Q_ENABLE);
+        self.regs3.ftqf_write(filter_num, filter_protocol as u32 | filter_priority | filter_mask | FTQF_Q_ENABLE)?;
 
         //set the rx queue that the packets for this filter should be sent to
-        self.regs3.l34timir[filter_num].write(L34TIMIR_BYPASS_SIZE_CHECK | L34TIMIR_RESERVED | ((qid as u32) << L34TIMIR_RX_Q_SHIFT));
+        self.regs3.l34timir_write(filter_num, L34TIMIR_BYPASS_SIZE_CHECK | L34TIMIR_RESERVED | ((qid as u32) << L34TIMIR_RX_Q_SHIFT))?;
 
         //mark the filter as used
         enabled_filters[filter_num] = true;
@@ -1098,8 +1096,7 @@ impl IxgbeNic {
     /// but keeps the values stored in the filter registers.
     fn disable_5_tuple_filter(&mut self, filter_num: u8) {
         // disables filter by setting enable bit to 0
-        let val = self.regs3.ftqf[filter_num as usize].read();
-        self.regs3.ftqf[filter_num as usize].write(val | !FTQF_Q_ENABLE);
+        self.regs3.ftqf_disable_filter(filter_num as usize);
 
         // sets the record in the nic struct to false
         self.l34_5_tuple_filters[filter_num as usize] = false;
