@@ -1,0 +1,12 @@
+[package]
+name = "memory_model"
+description = "a model of the memory crate with only essential structs and functions required for verification"
+version = "0.1.0"
+authors = ["Ramla-I <ijazramla@gmail.com>"]
+# build = "../../build.rs"
+
+[dependencies]
+bit_field = "0.7.0"
+
+[lib]
+crate-type = ["rlib"]

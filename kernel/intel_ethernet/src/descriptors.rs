@@ -2,10 +2,15 @@
 //! Usually the newer NICs use more advanced descriptor types but retain support for older ones.
 //! The difference in the types is the amount of packet information that is included in the descriptor, and the format.
 
-use memory::PhysicalAddress;
+// use memory::PhysicalAddress;
 use volatile::{Volatile, ReadOnly};
 use bit_field::BitField;
 use zerocopy::FromBytes;
+
+use memory_model::{u64_to_usize,PhysicalAddress, usize_to_u64};
+use verification_specs::*;
+
+use prusti_contracts::*;
 
 // Transmit descriptor bits
 /// Tx Command: End of Packet
@@ -129,7 +134,7 @@ impl TxDescriptor for LegacyTxDescriptor {
     }
 
     fn send(&mut self, transmit_buffer_addr: PhysicalAddress, transmit_buffer_length: u16) {
-        self.phys_addr.write(transmit_buffer_addr.value() as u64);
+        self.phys_addr.write(usize_to_u64(transmit_buffer_addr.value()));
         self.length.write(transmit_buffer_length);
         self.cmd.write(TX_CMD_EOP | TX_CMD_IFCS | TX_CMD_RPS | TX_CMD_RS); 
         self.status.write(0);
@@ -142,12 +147,12 @@ impl TxDescriptor for LegacyTxDescriptor {
     }
 }
 
-impl fmt::Debug for LegacyTxDescriptor {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            write!(f, "{{addr: {:#X}, length: {}, cso: {}, cmd: {}, status: {}, css: {}, special: {}}}",
-                    self.phys_addr.read(), self.length.read(), self.cso.read(), self.cmd.read(), self.status.read(), self.css.read(), self.vlan.read())
-    }
-}
+// impl fmt::Debug for LegacyTxDescriptor {
+//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+//             write!(f, "{{addr: {:#X}, length: {}, cso: {}, cmd: {}, status: {}, css: {}, special: {}}}",
+//                     self.phys_addr.read(), self.length.read(), self.cso.read(), self.cmd.read(), self.status.read(), self.css.read(), self.vlan.read())
+//     }
+// }
 
 
 
@@ -173,12 +178,12 @@ pub struct LegacyRxDescriptor {
 
 impl RxDescriptor for LegacyRxDescriptor {
     fn init(&mut self, packet_buffer_address: PhysicalAddress) {
-        self.phys_addr.write(packet_buffer_address.value() as u64);
+        self.phys_addr.write(usize_to_u64(packet_buffer_address.value()));
         self.status.write(0);
     }
 
     fn set_packet_address(&mut self, packet_buffer_address: PhysicalAddress) {
-        self.phys_addr.write(packet_buffer_address.value() as u64);
+        self.phys_addr.write(usize_to_u64(packet_buffer_address.value()));
     }
 
     fn reset_status(&mut self) {
@@ -198,13 +203,13 @@ impl RxDescriptor for LegacyRxDescriptor {
     }
 }
 
-use core::fmt;
-impl fmt::Debug for LegacyRxDescriptor {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            write!(f, "{{addr: {:#X}, length: {}, checksum: {}, status: {}, errors: {}, special: {}}}",
-                    self.phys_addr.read(), self.length.read(), self.checksum.read(), self.status.read(), self.errors.read(), self.vlan.read())
-    }
-}
+// use core::fmt;
+// impl fmt::Debug for LegacyRxDescriptor {
+//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+//             write!(f, "{{addr: {:#X}, length: {}, checksum: {}, status: {}, errors: {}, special: {}}}",
+//                     self.phys_addr.read(), self.length.read(), self.checksum.read(), self.status.read(), self.errors.read(), self.vlan.read())
+//     }
+// }
 
 
 /// Advanced Receive Descriptor used in the Ixgbe driver.
@@ -225,13 +230,13 @@ pub struct AdvancedRxDescriptor {
 
 impl RxDescriptor for AdvancedRxDescriptor {
     fn init (&mut self, packet_buffer_address: PhysicalAddress) {
-        self.packet_buffer_address.write(packet_buffer_address.value() as u64);
+        self.packet_buffer_address.write(usize_to_u64(packet_buffer_address.value()));
         // set the header address to 0 because packet splitting is not supposed to be enabled in the 82599
         self.header_buffer_address.write(0);
     }
 
     fn set_packet_address(&mut self, packet_buffer_address: PhysicalAddress) {
-        self.packet_buffer_address.write(packet_buffer_address.value() as u64);
+        self.packet_buffer_address.write(usize_to_u64(packet_buffer_address.value()));
     }
 
     fn reset_status(&mut self) {
@@ -321,12 +326,12 @@ impl AdvancedRxDescriptor {
     }    
 }
 
-impl fmt::Debug for AdvancedRxDescriptor {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{{Packet buffer address: {:#X}, Packet header address: {:#X}}}",
-            self.packet_buffer_address.read(), self.header_buffer_address.read())
-    }
-}
+// impl fmt::Debug for AdvancedRxDescriptor {
+//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+//         write!(f, "{{Packet buffer address: {:#X}, Packet header address: {:#X}}}",
+//             self.packet_buffer_address.read(), self.header_buffer_address.read())
+//     }
+// }
 
 
 /// Advanced Transmit Descriptor used by the `ixgbe` NIC driver.
@@ -362,6 +367,20 @@ pub struct AdvancedTxDescriptor {
 
 impl TxDescriptor for AdvancedTxDescriptor {
     fn init(&mut self) {
+        self.init()
+    }
+
+    fn send(&mut self, transmit_buffer_addr: PhysicalAddress, transmit_buffer_length: u16) {
+        self.send(transmit_buffer_addr, transmit_buffer_length)
+    }
+
+    fn wait_for_packet_tx(&self) {
+        self.wait_for_packet_tx() 
+    }
+}
+
+impl AdvancedTxDescriptor {
+    fn init(&mut self) {
         self.packet_buffer_address.write(0);
         self.paylen_popts_cc_idx_sta.write(0);
         self.dcmd.write(0);
@@ -370,16 +389,36 @@ impl TxDescriptor for AdvancedTxDescriptor {
     }
 
     fn send(&mut self, transmit_buffer_addr: PhysicalAddress, transmit_buffer_length: u16) {
-        self.packet_buffer_address.write(transmit_buffer_addr.value() as u64);
+        self.packet_buffer_address.write(usize_to_u64(transmit_buffer_addr.value()));
         self.data_len.write(transmit_buffer_length);
         self.dtyp_mac_rsv.write(TX_DTYP_ADV);
-        self.paylen_popts_cc_idx_sta.write((transmit_buffer_length as u32) << TX_PAYLEN_SHIFT);
+        self.paylen_popts_cc_idx_sta.write((u32::from(transmit_buffer_length)) << TX_PAYLEN_SHIFT);
         self.dcmd.write(TX_CMD_DEXT | TX_CMD_RS | TX_CMD_IFCS | TX_CMD_EOP);
     }
 
+    // #[ensures(self.paylen_popts_cc_idx_sta.read() & 1 == 1)]
     fn wait_for_packet_tx(&self) {
-        while (self.paylen_popts_cc_idx_sta.read() as u8 & TX_STATUS_DD) == 0 {
+        let dd = TX_STATUS_DD;
+        while (self.paylen_popts_cc_idx_sta.read() & 1) == 0 {
             // error!("tx desc status: {:#X}", self.desc.read());
         } 
     }
 }
+
+// #[pure]
+// fn packet_was_sent(status: u32) -> bool {
+//     (status & 1) == 1
+// }
+
+// #[extern_spec]
+// impl<T: Copy> Volatile<T> {
+
+//     #[pure]
+//     pub const fn new(value: T) -> Volatile<T>;
+
+//     #[pure]
+//     pub fn read(&self) -> T;
+
+//     pub fn write(&mut self, value: T);
+// }
+

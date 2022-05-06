@@ -3,17 +3,20 @@ name = "nic_buffers"
 description = "Structs for network transmit and receive buffers"
 version = "0.1.0"
 authors = ["Kevin Boos <kevinaboos@gmail.com>"]
-build = "../../build.rs"
+# build = "../../build.rs"
 
 [dependencies]
 owning_ref = { git = "https://github.com/theseus-os/owning-ref-rs" }
 mpmc = "0.1.6"
 
-[dependencies.memory]
-path = "../memory"
+# [dependencies.memory]
+# path = "../memory"
 
-[dependencies.log]
-version = "0.4.8"
+[dependencies.memory_model]
+path = "../memory_model"
+
+# [dependencies.log]
+# version = "0.4.8"
 
 
 [lib]

@@ -76,6 +76,9 @@ impl TxQueueRegisters for IxgbeTxQueueRegisters {
     fn set_tdt(&mut self, value: u32) {
         self.regs.tdt.write(value)
     }
+    fn get_tdt(&self) -> u32 {
+        self.regs.tdt.read()
+    }
 }
 impl Deref for IxgbeTxQueueRegisters {
     type Target = Box<RegistersTx>;

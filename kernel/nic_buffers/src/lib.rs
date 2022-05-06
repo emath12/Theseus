@@ -1,15 +1,18 @@
 //! Defines buffers that are used to send and receive packets.
 
 #![no_std]
-
+extern crate prusti_contracts;
+use prusti_contracts::*;
 extern crate alloc;
-#[macro_use] extern crate log;
-extern crate memory;
+// #[macro_use] extern crate log;
+extern crate memory_model;
+// extern crate memory;
 extern crate mpmc;
 
 use core::ops::{Deref, DerefMut};
 use alloc::vec::Vec;
-use memory::{PhysicalAddress, MappedPages, EntryFlags, create_contiguous_mapping};
+use memory_model::{PhysicalAddress, MappedPages, EntryFlags, create_contiguous_mapping};
+// use memory::{PhysicalAddress, MappedPages}; //, EntryFlags, create_contiguous_mapping};
 
 
 /// A buffer that stores a packet to be transmitted through the NIC
@@ -20,14 +23,15 @@ pub struct TransmitBuffer {
     pub phys_addr: PhysicalAddress,
     pub length: u16,
 }
+
 impl TransmitBuffer {
     /// Creates a new TransmitBuffer with the specified size in bytes.
     /// The size is a `u16` because that is the maximum size of an NIC transmit buffer. 
     pub fn new(size_in_bytes: u16) -> Result<TransmitBuffer, &'static str> {
         let (mp, starting_phys_addr) = create_contiguous_mapping(
             size_in_bytes as usize,
-            EntryFlags::WRITABLE | EntryFlags::NO_CACHE | EntryFlags::NO_EXECUTE,
-        )?;
+            EntryFlags::default(),
+        );
         Ok(TransmitBuffer {
             mp: mp,
             phys_addr: starting_phys_addr,
@@ -63,17 +67,17 @@ pub struct ReceiveBuffer {
     pub mp: MappedPages,
     pub phys_addr: PhysicalAddress,
     pub length: u16,
-    pool: &'static mpmc::Queue<ReceiveBuffer>,
+    // pool: &'static mpmc::Queue<ReceiveBuffer>,
 }
 impl ReceiveBuffer {
     /// Creates a new ReceiveBuffer with the given `MappedPages`, `PhysicalAddress`, and `length`. 
     /// When this ReceiveBuffer object is dropped, it will be returned to the given `pool`.
-    pub fn new(mp: MappedPages, phys_addr: PhysicalAddress, length: u16, pool: &'static mpmc::Queue<ReceiveBuffer>) -> ReceiveBuffer {
+    pub fn new(mp: MappedPages, phys_addr: PhysicalAddress, length: u16, /*pool: &'static mpmc::Queue<ReceiveBuffer>*/) -> ReceiveBuffer {
         ReceiveBuffer {
             mp: mp,
             phys_addr: phys_addr,
             length: length,
-            pool: pool,
+            // pool: pool,
         }
     }
 }
@@ -88,32 +92,34 @@ impl DerefMut for ReceiveBuffer {
         &mut self.mp
     }
 }
-impl Drop for ReceiveBuffer {
-    fn drop(&mut self) {
-        // trace!("ReceiveBuffer::drop(): length: {:5}, phys_addr: {:#X}, vaddr: {:#X}", self.length,  self.phys_addr, self.mp.start_address());
+// impl Drop for ReceiveBuffer {
+//     fn drop(&mut self) {
+//         // trace!("ReceiveBuffer::drop(): length: {:5}, phys_addr: {:#X}, vaddr: {:#X}", self.length,  self.phys_addr, self.mp.start_address());
 
-        // We need to return this ReceiveBuffer to its memory pool. We use a clever trick here:
-        // Since we cannot move this receive buffer out of `self` because it's borrowed, 
-        // we construct a new ReceiveBuffer object that is identical to this one being dropped,
-        // and do an in-place replacement of its `MappedPages` object with an empty MP object,
-        // allowing us to take ownership of the real MP object and put it into the new_rb. 
-        let new_rb = ReceiveBuffer {
-            mp: core::mem::replace(&mut self.mp, MappedPages::empty()),
-            phys_addr: self.phys_addr,
-            length: 0,
-            pool: self.pool,
-        };
-        // we set the length to 0 as a quick way to "clear" the buffer. We could also zero out the whole MP. 
+//         // We need to return this ReceiveBuffer to its memory pool. We use a clever trick here:
+//         // Since we cannot move this receive buffer out of `self` because it's borrowed, 
+//         // we construct a new ReceiveBuffer object that is identical to this one being dropped,
+//         // and do an in-place replacement of its `MappedPages` object with an empty MP object,
+//         // allowing us to take ownership of the real MP object and put it into the new_rb. 
+//         let pool = self.pool;
+//         let new_rb = ReceiveBuffer {
+//             mp: core::mem::replace(&mut self.mp, MappedPages::empty()),
+//             phys_addr: self.phys_addr,
+//             length: 0,
+//             pool: pool,
+//         };
+//         // we set the length to 0 as a quick way to "clear" the buffer. We could also zero out the whole MP. 
 
-        // Now, we can add the new receive buffer to the pool 
-        if let Err(_e) = self.pool.push(new_rb) {
-            error!("NIC: couldn't return dropped ReceiveBuffer to pool, buf length: {}, phys_addr: {:#X}", _e.length, _e.phys_addr);
-        }
+//         // Now, we can add the new receive buffer to the pool 
+//         if let Err(_e) = self.pool.push(new_rb) {
+//             // error!("NIC: couldn't return dropped ReceiveBuffer to pool, buf length: {}, phys_addr: {:#X}", _e.length, _e.phys_addr);
+//         }
 
-        // `self` will be automatically dropped now, which only has the empty MP object.
-    }
-}
+//         // `self` will be automatically dropped now, which only has the empty MP object.
+//     }
+// }
 
 
 /// A network (e.g., Ethernet) frame that has been received by the NIC.
 pub struct ReceivedFrame(pub Vec<ReceiveBuffer>);
+
