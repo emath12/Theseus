@@ -689,16 +689,10 @@ impl IxgbeNic {
             fcttv.write(0);
         }
 
-        for fcrtl in regs2.fcrtl.iter_mut() {
-            fcrtl.write(0);
-        }
-
-        for fcrth in regs2.fcrth.iter_mut() {
-            fcrth.write(0);
-        }
-
-        regs2.fcrtv.write(0);
-        regs2.fccfg.write(0);
+        regs2.fcrtl_clear();
+        regs2.fcrth_clear();
+        regs2.fcrtv_clear();
+        regs2.fccfg_clear();
 
         //disable interrupts
         regs1.eimc_disable_interrupts();
@@ -711,10 +705,11 @@ impl IxgbeNic {
         debug!("Ixgbe: MAC address high: {:#X}", regs_mac.rah.read() & 0xFFFF);
 
         //wait for dma initialization done (RDRXCTL.DMAIDONE)
-        let mut val = regs2.rdrxctl.read();
+        // TODO: can move to a function
+        let mut val = regs2.rdrxctl_read();
         let dmaidone_bit = 1 << 3;
         while val & dmaidone_bit != dmaidone_bit {
-            val = regs2.rdrxctl.read();
+            val = regs2.rdrxctl_read();
         }
 
         while Self::acquire_semaphore(regs3)? {
@@ -800,15 +795,13 @@ impl IxgbeNic {
 
         Self::disable_rx_function(regs);
         // program RXPBSIZE according to DCB and virtualization modes (both off)
-        regs.rxpbsize[0].write(RXPBSIZE_512KB);
+        regs.rxpbsize_set_buffer_size(0, RXPBSIZE_512KB)?;
         for i in 1..8 {
-            regs.rxpbsize[i].write(0);
+            regs.rxpbsize_set_buffer_size(i, 0)?;
         }
         //CRC offloading
-        regs.hlreg0.write(regs.hlreg0.read() | HLREG0_CRC_STRIP);
-        regs.rdrxctl.write(regs.rdrxctl.read() | RDRXCTL_CRC_STRIP);
-        // Clear bits
-        regs.rdrxctl.write(regs.rdrxctl.read() & !RDRXCTL_RSCFRSTSIZE);
+        regs.hlreg0_crc_strip();
+        regs.rdrxctl_crc_strip();
 
         for qid in 0..IXGBE_NUM_RX_QUEUES_ENABLED {
             let rxq = &mut rx_regs[qid as usize];        
@@ -844,27 +837,27 @@ impl IxgbeNic {
             rx_bufs_in_use_all_queues.push(rx_bufs_in_use);
         }
         
-        Self::enable_rx_function(regs1,regs);
+        Self::enable_rx_function(regs1,regs)?;
         Ok((rx_descs_all_queues, rx_bufs_in_use_all_queues))
     }
 
     /// disable receive functionality
     fn disable_rx_function(regs: &mut IntelIxgbeRegisters2) {        
-        let val = regs.rxctrl.read();
-        regs.rxctrl.write(val & !RECEIVE_ENABLE); 
+        regs.rxctrl_rx_disable();
     }
 
     /// enable receive functionality
-    fn enable_rx_function(regs1: &mut IntelIxgbeRegisters1,regs: &mut IntelIxgbeRegisters2) {
+    fn enable_rx_function(regs1: &mut IntelIxgbeRegisters1,regs: &mut IntelIxgbeRegisters2) -> Result<(), &'static str> {
         // set rx parameters of which type of packets are accepted by the nic
         // right now we allow the nic to receive all types of packets, even incorrectly formed ones
-        regs.fctrl.write(STORE_BAD_PACKETS | MULTICAST_PROMISCUOUS_ENABLE | UNICAST_PROMISCUOUS_ENABLE | BROADCAST_ACCEPT_MODE); 
+        regs.fctrl_write(STORE_BAD_PACKETS | MULTICAST_PROMISCUOUS_ENABLE | UNICAST_PROMISCUOUS_ENABLE | BROADCAST_ACCEPT_MODE)?; 
 
         regs1.ctrl_ext_no_snoop_disable();
 
         // enable receive functionality
-        let val = regs.rxctrl.read();
-        regs.rxctrl.write(val | RECEIVE_ENABLE); 
+        regs.rxctrl_rx_enable(); 
+
+        Ok(())
     }
 
     /// Initialize the array of transmit descriptors for all queues and returns them.
@@ -876,13 +869,15 @@ impl IxgbeNic {
         num_tx_descs: u16
     ) -> Result<Vec<BoxRefMut<MappedPages, [AdvancedTxDescriptor]>>, &'static str> {
         // disable transmission
-        Self::disable_transmission(regs);
+        regs.dmatxctl_disable_tx();
 
         // CRC offload and small packet padding enable
-        regs.hlreg0.write(regs.hlreg0.read() | HLREG0_TXCRCEN | HLREG0_TXPADEN);
+        regs.hlreg0_crc_en();
+        regs.hlreg0_tx_pad_en();
 
         // Set RTTFCS.ARBDIS to 1
-        regs.rttdcs.write(regs.rttdcs.read() | RTTDCS_ARBDIS);
+        regs.rttdcs_set_arbdis();
+
 
         // program DTXMXSZRQ and TXPBSIZE according to DCB and virtualization modes (both off)
         regs_mac.txpbsize[0].write(TXPBSIZE_160KB);
@@ -892,7 +887,7 @@ impl IxgbeNic {
         regs_mac.dtxmxszrq.write(DTXMXSZRQ_MAX_BYTES); 
 
         // Clear RTTFCS.ARBDIS
-        regs.rttdcs.write(regs.rttdcs.read() & !RTTDCS_ARBDIS);
+        regs.rttdcs_clear_arbdis();
 
         let mut tx_descs_all_queues = Vec::new();
         
@@ -903,7 +898,7 @@ impl IxgbeNic {
         
             if qid == 0 {
                 // enable transmit operation, only have to do this for the first queue
-                Self::enable_transmission(regs);
+                regs.dmatxctl_enable_tx();
             }
 
             // Set descriptor thresholds
@@ -923,18 +918,6 @@ impl IxgbeNic {
         Ok(tx_descs_all_queues)
     }  
 
-    /// disable transmit functionality
-    fn disable_transmission(regs: &mut IntelIxgbeRegisters2) {
-        let val = regs.dmatxctl.read();
-        regs.dmatxctl.write(val & !TE); 
-    }
-
-    /// enable transmit functionality
-    fn enable_transmission(regs: &mut IntelIxgbeRegisters2) {
-        let val = regs.dmatxctl.read();
-        regs.dmatxctl.write(val | TE); 
-    }
-
     /// Enable multiple receive queues with RSS.
     /// Part of queue initialization is done in the rx_init function.
     pub fn enable_rss(
@@ -942,7 +925,7 @@ impl IxgbeNic {
         regs3: &mut IntelIxgbeRegisters3
     ) -> Result<(), &'static str> {
         // enable RSS writeback in the header field of the receive descriptor
-        regs2.rxcsum.write(RXCSUM_PCSD);
+        regs2.rxcsum_enable_rss_writeback();
         
         // enable RSS and set fields that will be used by hash function
         // right now we're using the udp port and ipv4 address.

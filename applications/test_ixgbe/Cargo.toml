@@ -13,8 +13,8 @@ version = "0.4.8"
 [dependencies.terminal_print]
 path = "../../kernel/terminal_print"
 
-[dependencies.ixgbe]
-path = "../../kernel/ixgbe"
+[dependencies.ixgbe_intralingual]
+path = "../../kernel/ixgbe_intralingual"
 
 [dependencies.spawn]
 path = "../../kernel/spawn"

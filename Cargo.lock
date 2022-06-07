@@ -727,7 +727,7 @@ dependencies = [
  "fatfs",
  "io",
  "iommu",
- "ixgbe",
+ "ixgbe_intralingual",
  "keyboard",
  "log",
  "logger",
@@ -3148,6 +3148,18 @@ dependencies = [
  "terminal_print",
  "unified_channel",
  "window",
+]
+
+[[package]]
+name = "test_ixgbe"
+version = "0.1.0"
+dependencies = [
+ "getopts",
+ "ixgbe_intralingual",
+ "log",
+ "network_interface_card",
+ "spawn",
+ "terminal_print",
 ]
 
 [[package]]

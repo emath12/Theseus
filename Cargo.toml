@@ -37,7 +37,7 @@ exclude = [
 	"applications/heap_eval",
 	"applications/test_mutex_sleep",
 	"applications/test_wait_queue",
-	"applications/test_ixgbe",
+	# "applications/test_ixgbe",
 	# "applications/test_backtrace",
 
 	## libtheseus is currently built separately and not used

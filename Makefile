@@ -700,7 +700,7 @@ QEMU_FLAGS += -serial mon:$(SERIAL2)
 # QEMU_FLAGS += -display none -vga none
 
 ## Set the amount of system memory (RAM) provided to the QEMU guest OS
-QEMU_MEMORY ?= 512M
+QEMU_MEMORY ?= 8G
 QEMU_FLAGS += -m $(QEMU_MEMORY) 
 
 ## Enable multicore CPUs, i.e., SMP (Symmetric Multi-Processor)

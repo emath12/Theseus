@@ -26,19 +26,19 @@ use bit_field::BitField;
 #[repr(C)]
 pub struct IntelIxgbeRegisters1 {
     /// Device Control Register
-    ctrl:                           Volatile<u32>,          // 0x0
+    ctrl:                               Volatile<u32>,          // 0x0
     _padding0:                          [u8; 4],                // 0x4 - 0x7
     
     /// Device Status Register
-    status:                         ReadOnly<u32>,          // 0x8
+    status:                             ReadOnly<u32>,          // 0x8
     _padding1:                          [u8; 12],               // 0xC - 0x17
 
     /// Extended Device Control Register
-    ctrl_ext:                       Volatile<u32>,          // 0x18
+    ctrl_ext:                           Volatile<u32>,          // 0x18
     _padding2:                          [u8; 12],               // 0x1C - 0x27
 
     /// I2C Control
-    i2cctl:                         Volatile<u32>,          // 0x28
+    i2cctl:                             Volatile<u32>,          // 0x28
     _padding3:                          [u8; 2004],             // 0x2C - 0x7FF
 
     /// Extended Interrupt Cause Register
@@ -46,34 +46,34 @@ pub struct IntelIxgbeRegisters1 {
     _padding4:                          [u8; 4],                // 0x804 - 0x807
 
     /// Extended Interrupt Cause Set Register
-    eics:                           WriteOnly<u32>,         // 0x808
+    eics:                               WriteOnly<u32>,         // 0x808
     _padding5:                          [u8; 4],                // 0x80C - 0x80F
 
     /// Extended Interrupt Auto Clear Register
-    eiac:                           Volatile<u32>,          // 0x810; 
+    eiac:                               Volatile<u32>,          // 0x810; 
     _padding6:                          [u8; 12],               // 0x814 - 0x81F 
     
     /// Extended Interrupt Throttle Registers
-    eitr:                           [Volatile<u32>; 24],    // 0x820 - 0x87F; 
+    eitr:                               [Volatile<u32>; 24],    // 0x820 - 0x87F; 
 
     /// Extended Interrupt Mask Set/ Read Register
-    eims:                           Volatile<u32>,          // 0x880; 
+    eims:                               Volatile<u32>,          // 0x880; 
     _padding7:                          [u8; 4],                // 0x884 - 0x887
 
     /// Extended Interrupt Mask Clear Register
-    eimc:                           WriteOnly<u32>,         // 0x888; 
+    eimc:                               WriteOnly<u32>,         // 0x888; 
     _padding8:                          [u8; 4],                // 0x88C - 0x88F     
 
     /// Extended Interrupt Auto Mask Enable Register
-    eiam:                           Volatile<u32>,          // 0x890; 
+    eiam:                               Volatile<u32>,          // 0x890; 
     _padding9:                          [u8; 4],                // 0x894 - 0x897
 
     /// General Purpose Interrupt Enable
-    gpie:                           Volatile<u32>,          // 0x898; 
+    gpie:                               Volatile<u32>,          // 0x898; 
     _padding10:                         [u8; 100],              // 0x89C - 0x8FF
 
     /// Interrupt Vector Allocation Registers
-    ivar:                           [Volatile<u32>; 64],    // 0x900 - 0x9FF  
+    ivar:                               [Volatile<u32>; 64],    // 0x900 - 0x9FF  
     _padding11:                         [u8; 1536],             // 0xA00 - 0xFFF
 
 } // 1 4KiB page
@@ -161,11 +161,11 @@ pub struct IntelIxgbeRegisters2 {
     _padding1:                          [u8; 3840],             // 0x2000 - 0x2EFF
     
     /// Receive DMA Control Register
-    pub rdrxctl:                        Volatile<u32>,          // 0x2F00;
+    rdrxctl:                            Volatile<u32>,          // 0x2F00;
     _padding2:                          [u8; 252],              // 0x2F04 - 0x2FFF
 
     /// Receive Control Register
-    pub rxctrl:                         Volatile<u32>,          // 0x3000;
+    rxctrl:                             Volatile<u32>,          // 0x3000;
     _padding3:                          [u8; 508],              // 0x3004 - 0x31FF
 
     /// Flow Control Transmit Timer Value
@@ -173,23 +173,23 @@ pub struct IntelIxgbeRegisters2 {
     _padding4:                          [u8; 16],               // 0x3210 - 0x321F
 
     /// Flow Control Receive Threshold Low
-    pub fcrtl:                          [Volatile<u32>;8],      // 0x3220 - 0x323F
+    fcrtl:                              [Volatile<u32>;8],      // 0x3220 - 0x323F
     _padding5:                          [u8; 32],               // 0x3240 - 0x325F 
 
     /// Flow Control Receive Threshold High
-    pub fcrth:                          [Volatile<u32>;8],      // 0x3260 - 0x327F
+    fcrth:                              [Volatile<u32>;8],      // 0x3260 - 0x327F
     _padding6:                          [u8; 32],               // 0x3280 - 0x329F
 
     /// Flow Control Refresh Threshold Value
-    pub fcrtv:                          Volatile<u32>,          // 0x32A0;
+    fcrtv:                              Volatile<u32>,          // 0x32A0;
     _padding7:                          [u8; 2396],             // 0x32A4 - 0x3CFF
 
     ///Receive Packet Buffer Size
-    pub rxpbsize:                       [Volatile<u32>;8],      // 0x3C00   
+    rxpbsize:                           [Volatile<u32>;8],      // 0x3C00   
     _padding8:                          [u8; 224],              // 0x3C20 - 0x3CFF        
 
     /// Flow Control Configuration
-    pub fccfg:                          Volatile<u32>,          // 0x3D00;
+    fccfg:                              Volatile<u32>,          // 0x3D00;
     _padding9:                          [u8; 880],              // 0x3D04 - 0x4073
 
     /// Good Packets Received Count
@@ -214,7 +214,7 @@ pub struct IntelIxgbeRegisters2 {
     _padding12:                         [u8; 424],              // 0x4098 - 0x423F
 
     /// MAC Core Control 0 Register 
-    pub hlreg0:                         Volatile<u32>,          // 0x4240;
+    hlreg0:                             Volatile<u32>,          // 0x4240;
     _padding13:                         [u8; 92],               // 0x4244 - 0x429F
 
     /// Auto-Negotiation Control Register
@@ -224,7 +224,7 @@ pub struct IntelIxgbeRegisters2 {
     pub links:                          Volatile<u32>,          // 0x42A4;
 
     /// Auto-Negotiation Control 2 Register    
-    pub autoc2:                         Volatile<u32>,          // 0x42A8;
+    autoc2:                             Volatile<u32>,          // 0x42A8;
     _padding14:                         [u8; 120],              // 0x42AC - 0x4323
 
     /// Link Status Register 2
@@ -232,34 +232,143 @@ pub struct IntelIxgbeRegisters2 {
     _padding15:                         [u8; 1496],             // 0x4328 - 0x48FF
 
     /// DCB Transmit Descriptor Plane Control and Status
-    pub rttdcs:                         Volatile<u32>,          // 0x4900;
+    rttdcs:                             Volatile<u32>,          // 0x4900;
     _padding16:                         [u8; 380],              // 0x4904 - 0x4A7F
 
     /// DMA Tx Control
-    pub dmatxctl:                       Volatile<u32>,          // 0x4A80;
+    dmatxctl:                           Volatile<u32>,          // 0x4A80;
     _padding17:                         [u8; 4],                // 0x4A84 - 0x4A87
     
     /// DMA Tx TCP Flags Control Low
-    pub dtxtcpflgl:                     Volatile<u32>,          // 0x4A88;
+    dtxtcpflgl:                         Volatile<u32>,          // 0x4A88;
     
     /// DMA Tx TCP Flags Control High
-    pub dtxtcpflgh:                     Volatile<u32>,          // 0x4A8C;
+    dtxtcpflgh:                         Volatile<u32>,          // 0x4A8C;
     _padding18:                         [u8; 1392],             // 0x4A90 - 0x4FFF
 
     /// Receive Checksum Control
-    pub rxcsum:                         Volatile<u32>,          // 0x5000
+    rxcsum:                             Volatile<u32>,          // 0x5000
     _padding19:                         [u8; 124],              // 0x5004 - 0x507F
 
     /// Filter Control Register
-    pub fctrl:                          Volatile<u32>,          // 0x5080;
+    fctrl:                              Volatile<u32>,          // 0x5080;
     _padding20:                         [u8; 164],              // 0x5084 - 0x5127
 
     /// EType Queue Filter
-    pub etqf:                           [Volatile<u32>;8],      // 0x5128 - 0x5147;
+    etqf:                               [Volatile<u32>;8],      // 0x5128 - 0x5147;
     _padding21:                         [u8; 3768],             // 0x5148 - 0x5FFF
 } // 4 4KiB page
 
 const_assert_eq!(core::mem::size_of::<IntelIxgbeRegisters2>(), 4 * 4096);
+
+impl IntelIxgbeRegisters2 {
+    pub fn rdrxctl_read(&self) -> u32 {
+        self.rdrxctl.read()
+    }
+
+    pub fn rdrxctl_crc_strip(&mut self) {
+        let init_val = 0x0600_8800;
+        self.rdrxctl.write(init_val | RDRXCTL_CRC_STRIP);
+    }
+
+    pub fn rxctrl_rx_enable(&mut self) {
+        let val = self.rxctrl.read();
+        self.rxctrl.write(val | RECEIVE_ENABLE); 
+    }
+
+    pub fn rxctrl_rx_disable(&mut self) {
+        let val = self.rxctrl.read();
+        self.rxctrl.write(val & !RECEIVE_ENABLE); 
+    }
+
+    pub fn fcrtl_clear(&mut self) {
+        for fcrtl in self.fcrtl.iter_mut() {
+            fcrtl.write(0);
+        }
+    } 
+    
+    pub fn fcrth_clear(&mut self) {
+        for fcrth in self.fcrth.iter_mut() {
+            fcrth.write(0);
+        }
+    } 
+
+    pub fn fcrtv_clear(&mut self) {
+        self.fcrtv.write(0);
+    }
+
+    pub fn fccfg_clear(&mut self) {
+        self.fccfg.write(0);
+    }
+
+    pub fn rxpbsize_set_buffer_size(&mut self, reg_idx: usize, size: u32) -> Result<(), &'static str> {
+        let size_mask = 0x3FF; // 10 bits
+        if size & !size_mask != 0 {
+            Err("invalid write to rxpbsize")
+        } else {
+            self.rxpbsize[reg_idx].write(size << 10);
+            Ok(())
+        }
+    }
+
+    pub fn hlreg0_crc_strip(&mut self) {
+        self.hlreg0.write(self.hlreg0.read() | HLREG0_CRC_STRIP);
+    }
+
+    pub fn hlreg0_crc_en(&mut self) {
+        self.hlreg0.write(self.hlreg0.read() | HLREG0_TXCRCEN);
+    }
+
+    pub fn hlreg0_tx_pad_en(&mut self) {
+        self.hlreg0.write(self.hlreg0.read() | HLREG0_TXPADEN);
+    }
+
+    pub fn autoc2_read(&self) -> u32 {
+        self.autoc2.read()
+    }
+
+    //TODO: can prob make this a more streamlined function
+    pub fn autoc2_write(&mut self, val: u32) -> Result<(), &'static str> {
+        let write_mask = 0x5007_0000;
+        if val & !write_mask != 0 {
+            Err("invalid write to AUTOC2")
+        } else {
+            self.autoc2.write(val);
+            Ok(())
+        }
+    }
+
+    // TODO: check rxctrl.rxen set to 0
+    pub fn fctrl_write(&mut self, val: u32) -> Result<(), &'static str> {
+        let write_mask = 0x0000_0702;
+        if val & !write_mask != 0 {
+            Err("invalid write to FCTRL")
+        } else {
+            self.fctrl.write(val);
+            Ok(())
+        }
+    }
+
+    pub fn rttdcs_set_arbdis(&mut self) {
+        self.rttdcs.write(self.rttdcs.read() | RTTDCS_ARBDIS);
+    }
+
+    pub fn rttdcs_clear_arbdis(&mut self) {
+        self.rttdcs.write(self.rttdcs.read() & !RTTDCS_ARBDIS);
+    }
+
+    pub fn dmatxctl_disable_tx(&mut self) {
+        self.dmatxctl.write(self.dmatxctl.read() & !TE); 
+    }
+
+    pub fn dmatxctl_enable_tx(&mut self) {
+        self.dmatxctl.write(self.dmatxctl.read() | TE); 
+    }
+
+    pub fn rxcsum_enable_rss_writeback(&mut self) {
+        self.rxcsum.write(RXCSUM_PCSD);
+    }
+}
 
 /// The layout in memory of the transmit queue registers of the 82599 device.
 #[derive(FromBytes)]
@@ -505,7 +614,7 @@ pub const RTTDCS_ARBDIS:                u32 = 1 << 6;
 /// For DCB and VT disabled, set TXPBSIZE.SIZE to 160KB
 pub const TXPBSIZE_160KB:                u32 = 0xA0 << 10;
 /// For DCB and VT disabled, set RXPBSIZE.SIZE to 512KB
-pub const RXPBSIZE_512KB:                u32 = 0x200 << 10;
+pub const RXPBSIZE_512KB:                u32 = 0x200;
 
 // RCTL commands
 pub const BSIZEPACKET_8K:               u32 = 8;
