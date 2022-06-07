@@ -1,0 +1,90 @@
+[package]
+name = "ixgbe_intralingual"
+version = "0.1.0"
+description = "Intralingual driver for the 10 GbE Intel 82599 NIC"
+authors = ["Ramla <ijazramla@gmail.com>"]
+
+[dependencies]
+spin = "0.9.0"
+volatile = "0.2.4"
+x86_64 = { path = "../../libs/x86_64" } # currently using our local copy, forked from Phil Opp's crate
+bit_field = "0.7.0"
+owning_ref = { git = "https://github.com/theseus-os/owning-ref-rs" }
+zerocopy = "0.5.0"
+static_assertions = "1.1.0"
+mpmc = "0.1.6"
+
+[dependencies.hashbrown]
+version = "0.11.2"
+features = ["nightly"]
+
+[dependencies.log]
+default-features = false
+version = "0.4.8"
+
+[dependencies.lazy_static]
+features = ["spin_no_std"]
+version = "1.4.0"
+
+[dependencies.irq_safety]
+git = "https://github.com/theseus-os/irq_safety"
+
+[dependencies.kernel_config]
+path = "../kernel_config"
+
+[dependencies.memory]
+path = "../memory"
+
+[dependencies.apic]
+path = "../apic"
+
+[dependencies.pic]
+path = "../pic"
+
+[dependencies.pci]
+path = "../pci"
+
+[dependencies.acpi]
+path = "../acpi"
+
+[dependencies.pit_clock]
+path = "../pit_clock"
+
+[dependencies.interrupts]
+path = "../interrupts"
+
+[dependencies.rand]
+version = "0.8"
+default-features = false 
+features = [ "alloc", "small_rng" ]
+
+[dependencies.hpet]
+path = "../acpi/hpet"
+
+[dependencies.runqueue]
+path = "../runqueue"
+
+[dependencies.network_interface_card]
+path = "../network_interface_card"
+
+[dependencies.nic_initialization]
+path = "../nic_initialization"
+
+[dependencies.intel_ethernet]
+path = "../intel_ethernet"
+
+[dependencies.nic_buffers]
+path = "../nic_buffers"
+
+[dependencies.nic_queues]
+path = "../nic_queues"
+
+[dependencies.physical_nic]
+path = "../physical_nic"
+
+[dependencies.virtual_nic]
+path = "../virtual_nic"
+
+[lib]
+crate-type = ["rlib"] # "lib" does the same thing I think
+
