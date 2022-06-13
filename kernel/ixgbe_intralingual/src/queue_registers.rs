@@ -55,7 +55,7 @@ impl DerefMut for IxgbeRxQueueRegisters {
 
 /// Struct that stores a pointer to registers for one ixgbe transmit queue
 /// as well as a shared reference to the backing `MappedPages` where these registers are located.
-pub struct IxgbeTxQueueRegisters {
+pub(crate) struct IxgbeTxQueueRegisters {
     /// the ID of the tx queue that these registers control
     id: usize,
     /// We prevent the drop handler from dropping the `regs` because the backing memory is not in the heap,

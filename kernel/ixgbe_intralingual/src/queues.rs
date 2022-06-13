@@ -26,7 +26,7 @@ pub struct TxQueue {
 }
 
 impl TxQueue {
-    pub fn new(mut regs: IxgbeTxQueueRegisters, tx_descs: IxgbeTxDescriptors, cpu_id: Option<u8>) -> TxQueue {
+    pub(crate) fn new(mut regs: IxgbeTxQueueRegisters, tx_descs: IxgbeTxDescriptors, cpu_id: Option<u8>) -> TxQueue {
         let num_tx_descs = tx_descs.len();
         // write the physical address of the tx descs array
         regs.tdbal.write(tx_descs.paddr.value() as u32); 
