@@ -17,7 +17,7 @@
 //! e.g."sudo arp -i eno1 -s 192.168.0.20 0c:c4:7a:d2:ee:1a"
 
 #![no_std]
-#[macro_use] extern crate alloc;
+/*#[macro_use]*/ extern crate alloc;
 // #[macro_use] extern crate log;
 #[macro_use] extern crate terminal_print;
 extern crate network_interface_card;
@@ -28,9 +28,11 @@ extern crate getopts;
 use alloc::vec::Vec;
 use alloc::string::String;
 use ixgbe_intralingual::{
-    virtual_function, get_ixgbe_nics_list,
+    // virtual_function, 
+    get_ixgbe_nics_list,
     test_packets::create_raw_packet,
-    IXGBE_NUM_RX_QUEUES_ENABLED, IXGBE_NUM_TX_QUEUES_ENABLED, tx_send_mq, rx_poll_mq
+    // IXGBE_NUM_RX_QUEUES_ENABLED, IXGBE_NUM_TX_QUEUES_ENABLED, tx_send_mq, rx_poll_mq
+    IXGBE_NUM_TX_QUEUES_ENABLED, tx_send_mq
 };
 use network_interface_card::NetworkInterfaceCard;
 use getopts::{Matches, Options};
@@ -75,7 +77,7 @@ pub fn main(args: Vec<String>) -> isize {
     }
 }
 
-fn rmain(matches: &Matches, opts: &Options) -> Result<(), &'static str> {
+fn rmain(_matches: &Matches, _opts: &Options) -> Result<(), &'static str> {
     
     let (dev_id, mac_address) = {
         let ixgbe_devs = get_ixgbe_nics_list().ok_or("Ixgbe NICs list not initialized")?;
@@ -84,50 +86,50 @@ fn rmain(matches: &Matches, opts: &Options) -> Result<(), &'static str> {
         (nic.device_id(), nic.mac_address())
     };
 
-    if matches.opt_present("virtual") {
-        if IXGBE_NUM_RX_QUEUES_ENABLED != IXGBE_NUM_TX_QUEUES_ENABLED {
-            return Err("When using the virtual nic interface, there should be an equal number of RX and TX queues");
-        }
+    // if matches.opt_present("virtual") {
+    //     if IXGBE_NUM_RX_QUEUES_ENABLED != IXGBE_NUM_TX_QUEUES_ENABLED {
+    //         return Err("When using the virtual nic interface, there should be an equal number of RX and TX queues");
+    //     }
         
-        let num_nics = IXGBE_NUM_RX_QUEUES_ENABLED - 1;
-        let mut nics = Vec::with_capacity(num_nics as usize);
+    //     let num_nics = IXGBE_NUM_RX_QUEUES_ENABLED - 1;
+    //     let mut nics = Vec::with_capacity(num_nics as usize);
         
-        for i in 0..num_nics {
-            let nic1 = virtual_function::create_virtual_nic(dev_id, vec!([192,168,0,i as u8 + 1]), 0, 0)?;
-            nics.push(nic1);
-        }
+    //     for i in 0..num_nics {
+    //         let nic1 = virtual_function::create_virtual_nic(dev_id, vec!([192,168,0,i as u8 + 1]), 0, 0)?;
+    //         nics.push(nic1);
+    //     }
     
-        for nic in &mut nics {
-            let buffer = create_raw_packet(&DEST_MAC_ADDR, &mac_address, &[1;46])?;
-            nic.send_packet(buffer)?;
-        }
+    //     for nic in &mut nics {
+    //         let buffer = create_raw_packet(&DEST_MAC_ADDR, &mac_address, &[1;46])?;
+    //         nic.send_packet(buffer)?;
+    //     }
         
-        if matches.opt_present("r") {
-            loop {
-                for nic in &mut nics {
-                    nic.poll_receive()?;
-                    if let Some(_buffer) = nic.get_received_frame() {
-                        println!("Received packet on vnic {}", nic.id());
-                    }
-                }
-            }
-        }
-    } else {
+    //     if matches.opt_present("r") {
+    //         loop {
+    //             for nic in &mut nics {
+    //                 nic.poll_receive()?;
+    //                 if let Some(_buffer) = nic.get_received_frame() {
+    //                     println!("Received packet on vnic {}", nic.id());
+    //                 }
+    //             }
+    //         }
+    //     }
+    // } else {
         for qid in 0..IXGBE_NUM_TX_QUEUES_ENABLED {
             let buffer = create_raw_packet(&DEST_MAC_ADDR, &mac_address, &[1;46])?;
             tx_send_mq(qid as usize, dev_id, Some(buffer))?;
         }
 
-        if matches.opt_present("r") {
-            loop {
-                for qid in 0..IXGBE_NUM_RX_QUEUES_ENABLED {
-                    if let Ok(_buffer) = rx_poll_mq(qid as usize, dev_id) {
-                        println!("Received packet on queue {}", qid);
-                    }
-                }
-            }
-        }
-    }
+        // if matches.opt_present("r") {
+        //     loop {
+        //         for qid in 0..IXGBE_NUM_RX_QUEUES_ENABLED {
+        //             if let Ok(_buffer) = rx_poll_mq(qid as usize, dev_id) {
+        //                 println!("Received packet on queue {}", qid);
+        //             }
+        //         }
+        //     }
+        // }
+    // }
     
 
 

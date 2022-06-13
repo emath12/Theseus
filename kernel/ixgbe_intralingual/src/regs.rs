@@ -19,7 +19,7 @@
 
 use volatile::{Volatile, ReadOnly, WriteOnly};
 use zerocopy::FromBytes;
-use bit_field::BitField;
+// use bit_field::BitField;
 
 /// The layout in memory of the first set of general registers of the 82599 device.
 #[derive(FromBytes)]
