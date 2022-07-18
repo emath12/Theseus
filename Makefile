@@ -1,13 +1,18 @@
 ### This makefile is the top-level build script that builds all the crates in subdirectories 
 ### and combines them into the final OS .iso image.
 ### It also provides convenient targets for running and debugging Theseus and using GDB on your host computer.
-.DEFAULT_GOAL := all
 SHELL := /bin/bash
+
+## Disable parallelism for this Makefile since it breaks the build,
+## as our dependencies aren't perfectly specified for each target.
+## Cargo already handles build parallelism for us anyway.
+.NOTPARALLEL:
 
 ## most of the variables used below are defined in Config.mk
 include cfg/Config.mk
 
-all: iso
+## By default, we just build the standard OS image via the `iso` target.
+.DEFAULT_GOAL := iso
 
 ## Default values for various configuration options.
 debug ?= none
@@ -15,7 +20,6 @@ net ?= none
 
 ## test for Windows Subsystem for Linux (Linux on Windows)
 IS_WSL = $(shell grep -is 'microsoft' /proc/version)
-
 
 
 ## Tool names/locations for cross-compiling on a Mac OS / macOS host (Darwin).
@@ -32,8 +36,15 @@ else
 	UNMOUNT = umount
 	USB_DRIVES = $(shell lsblk -O | grep -i usb | awk '{print $$2}' | grep --color=never '[^0-9]$$')
 endif
-GRUB_MKRESCUE = $(GRUB_CROSS)grub-mkrescue
 
+## Look for `grub-mkrescue` (Debian-like distros) or `grub2-mkrescue` (Fedora)
+ifneq (,$(shell command -v $(GRUB_CROSS)grub-mkrescue))
+	GRUB_MKRESCUE = $(GRUB_CROSS)grub-mkrescue
+else ifneq (,$(shell command -v $(GRUB_CROSS)grub2-mkrescue))
+	GRUB_MKRESCUE = $(GRUB_CROSS)grub2-mkrescue
+else
+	$(error Error: could not find 'grub-mkrescue' or 'grub2-mkrescue', please install 'grub' or 'grub2')
+endif
 
 
 ###################################################################################################
@@ -62,14 +73,14 @@ iso := $(BUILD_DIR)/theseus-$(ARCH).iso
 GRUB_ISOFILES := $(BUILD_DIR)/grub-isofiles
 OBJECT_FILES_BUILD_DIR := $(GRUB_ISOFILES)/modules
 DEBUG_SYMBOLS_DIR := $(BUILD_DIR)/debug_symbols
-DEPS_DIR := $(BUILD_DIR)/deps
-HOST_DEPS_DIR := $(DEPS_DIR)/host_deps
-DEPS_SYSROOT_DIR := $(DEPS_DIR)/sysroot
-THESEUS_BUILD_TOML := $(DEPS_DIR)/TheseusBuild.toml
+TARGET_DEPS_DIR := $(ROOT_DIR)/target/$(TARGET)/$(BUILD_MODE)/deps
+DEPS_BUILD_DIR := $(BUILD_DIR)/deps
+HOST_DEPS_DIR := $(DEPS_BUILD_DIR)/host_deps
+DEPS_SYSROOT_DIR := $(DEPS_BUILD_DIR)/sysroot
+THESEUS_BUILD_TOML := $(DEPS_BUILD_DIR)/TheseusBuild.toml
 THESEUS_CARGO := $(ROOT_DIR)/tools/theseus_cargo
 THESEUS_CARGO_BIN := $(THESEUS_CARGO)/bin/theseus_cargo
 EXTRA_FILES := $(ROOT_DIR)/extra_files
-
 
 ## This is the default output path defined by cargo.
 nano_core_static_lib := $(ROOT_DIR)/target/$(TARGET)/$(BUILD_MODE)/libnano_core.a
@@ -107,7 +118,7 @@ APP_CRATE_NAMES += $(EXTRA_APP_CRATE_NAMES)
 
 ### PHONY is the list of targets that *always* get rebuilt regardless of dependent files' modification timestamps.
 ### Most targets are PHONY because cargo itself handles whether or not to rebuild the Rust code base.
-.PHONY: all \
+.PHONY: all full \
 		check-rustc check-usb \
 		clean clean-doc clean-old-build \
 		run run_pause iso build cargo grub extra_files \
@@ -125,6 +136,10 @@ ifneq (,$(findstring avx,$(TARGET)))
 export override CFLAGS+=-DENABLE_AVX
 endif
 
+### Convenience targets for building Theseus with all features enabled.
+all: full
+full : export override CARGOFLAGS += --all-features
+full: iso
 
 
 ### Convenience target for building the ISO using the below $(iso) target
@@ -152,23 +167,23 @@ build: $(nano_core_binary)
 ## First, if an .rlib archive contains multiple object files, we need to extract them all out of the archive
 ## and combine them into one object file using partial linking (`ld -r ...`), overwriting the rustc-emitted .o file.
 ## Note: we skip "normal" .rlib archives that have 2 members: a single .o object file and a single .rmeta file.
-## Note: the below line with the `cut` invocations simply removes the `lib` prefix and the `.rlib` suffix from the file name.
-	@for f in $(shell find ./target/$(TARGET)/$(BUILD_MODE)/deps/ -name "*.rlib"); do \
-		if [ "`$(CROSS)ar -t $${f} | wc -l`" != "2" ]; then \
-			echo -e "\033[1;34mUnarchiving multi-file rlib: \033[0m $${f}"   ; \
-			mkdir -p "$(BUILD_DIR)/extracted_rlibs/`basename $${f}`-unpacked/" ; \
-			$(CROSS)ar -xo --output "$(BUILD_DIR)/extracted_rlibs/`basename $${f}`-unpacked/" $${f}   ; \
-			$(CROSS)ld -r  \
-				--output "./target/$(TARGET)/$(BUILD_MODE)/deps/`basename $${f} | cut -c 4- | rev | cut -c 6- | rev`.o"  \
-				$$(find $(BUILD_DIR)/extracted_rlibs/$$(basename $${f})-unpacked/ -name "*.o")  ; \
-		fi ; \
-	done
+## Note: the below line with `cut` simply removes the `lib` prefix and the `.rlib` suffix from the file name.
+	@for f in $(shell find $(TARGET_DEPS_DIR)/ -name "*.rlib"); do                                          \
+		if [ "`$(CROSS)ar -t $${f} | wc -l`" != "2" ]; then                                                 \
+			echo -e "\033[1;34mUnarchiving multi-file rlib: \033[0m $${f}"                                  \
+				&& mkdir -p "$(BUILD_DIR)/extracted_rlibs/`basename $${f}`-unpacked/"                       \
+				&& $(CROSS)ar -xo --output "$(BUILD_DIR)/extracted_rlibs/`basename $${f}`-unpacked/" $${f}  \
+				&& $(CROSS)ld -r                                                                            \
+					--output "$(TARGET_DEPS_DIR)/`basename $${f} | cut -c 4- | rev | cut -c 6- | rev`.o"    \
+					$$(find $(BUILD_DIR)/extracted_rlibs/$$(basename $${f})-unpacked/ -name "*.o")        ; \
+		fi  &                                                                                               \
+	done; wait
 
 ## Second, copy all object files into the main build directory and prepend the kernel or app prefix appropriately. 
-	@cargo run --release --manifest-path $(ROOT_DIR)/tools/copy_latest_crate_objects/Cargo.toml -- \
-		-i ./target/$(TARGET)/$(BUILD_MODE)/deps \
+	cargo run --release --manifest-path $(ROOT_DIR)/tools/copy_latest_crate_objects/Cargo.toml -- \
+		-i "$(TARGET_DEPS_DIR)" \
 		--output-objects $(OBJECT_FILES_BUILD_DIR) \
-		--output-deps $(DEPS_DIR) \
+		--output-deps $(DEPS_BUILD_DIR) \
 		--output-sysroot $(DEPS_SYSROOT_DIR)/lib/rustlib/$(TARGET)/lib \
 		-k ./kernel \
 		-a ./applications \
@@ -180,7 +195,7 @@ build: $(nano_core_binary)
 ## This includes the target file, host OS dependencies (proc macros, etc)., 
 ## and most importantly, a TOML file to describe these and other config variables.
 	@rm -rf $(THESEUS_BUILD_TOML)
-	@cp -vf $(CFG_DIR)/$(TARGET).json  $(DEPS_DIR)/
+	@cp -f $(CFG_DIR)/$(TARGET).json  $(DEPS_BUILD_DIR)/
 	@mkdir -p $(HOST_DEPS_DIR)
 	@cp -f ./target/$(BUILD_MODE)/deps/*  $(HOST_DEPS_DIR)/
 	@echo -e 'target = "$(TARGET)"' >> $(THESEUS_BUILD_TOML)
@@ -195,20 +210,20 @@ ifeq ($(debug),full)
 # don't strip any files
 else ifeq ($(debug),none)
 # strip all files
-	@for f in $(OBJECT_FILES_BUILD_DIR)/*.o $(nano_core_binary); do \
-		dbg_file=$(DEBUG_SYMBOLS_DIR)/`basename $${f}`.dbg ; \
-		cp $${f} $${dbg_file} ; \
-		$(CROSS)strip  --only-keep-debug  $${dbg_file} ; \
-		$(CROSS)strip  --strip-debug      $${f} ; \
-	done
+	@for f in $(OBJECT_FILES_BUILD_DIR)/*.o $(nano_core_binary) ; do \
+		dbg_file=$(DEBUG_SYMBOLS_DIR)/`basename $${f}`.dbg           \
+			&& cp $${f} $${dbg_file}                                 \
+			&& $(CROSS)strip  --only-keep-debug  $${dbg_file}        \
+			&& $(CROSS)strip  --strip-debug      $${f}             & \
+	done; wait
 else ifeq ($(debug),base)
 # strip all object files but the base kernel
-	@for f in $(OBJECT_FILES_BUILD_DIR)/*.o ; do \
-		dbg_file=$(DEBUG_SYMBOLS_DIR)/`basename $${f}`.dbg ; \
-		cp $${f} $${dbg_file} ; \
-		$(CROSS)strip  --only-keep-debug  $${dbg_file} ; \
-		$(CROSS)strip  --strip-debug      $${f} ; \
-	done
+	@for f in $(OBJECT_FILES_BUILD_DIR)/*.o ; do                     \
+		dbg_file=$(DEBUG_SYMBOLS_DIR)/`basename $${f}`.dbg           \
+			&& cp $${f} $${dbg_file}                                 \
+			&& $(CROSS)strip  --only-keep-debug  $${dbg_file}        \
+			&& $(CROSS)strip  --strip-debug      $${f}             & \
+	done; wait
 else
 $(error Error: unsupported option "debug=$(debug)". Options are 'full', 'none', or 'base')
 endif
@@ -219,14 +234,17 @@ endif
 
 
 
-## This target invokes the actual Rust build process
+## This target invokes the actual Rust build process via `cargo`.
+##
+## The below line converts `THESEUS_CONFIG` values into `RUSTFLAGS` by prepending "--cfg " to each one.
+cargo : export override RUSTFLAGS += $(patsubst %,--cfg %, $(THESEUS_CONFIG))
 cargo: check-rustc 
 	@echo -e "\n=================== BUILDING ALL CRATES ==================="
 	@echo -e "\t TARGET: \"$(TARGET)\""
 	@echo -e "\t KERNEL_PREFIX: \"$(KERNEL_PREFIX)\""
 	@echo -e "\t APP_PREFIX: \"$(APP_PREFIX)\""
 	@echo -e "\t THESEUS_CONFIG (before build.rs script): \"$(THESEUS_CONFIG)\""
-	RUST_TARGET_PATH="$(CFG_DIR)" RUSTFLAGS="$(RUSTFLAGS)" cargo build $(CARGOFLAGS) $(BUILD_STD_CARGOFLAGS) $(RUST_FEATURES) --all --target $(TARGET)
+	RUST_TARGET_PATH='$(CFG_DIR)' RUSTFLAGS='$(RUSTFLAGS)' cargo build $(CARGOFLAGS) $(BUILD_STD_CARGOFLAGS) $(RUST_FEATURES) --target $(TARGET)
 
 ## We tried using the "cargo rustc" command here instead of "cargo build" to avoid cargo unnecessarily rebuilding core/alloc crates,
 ## But it doesn't really seem to work (it's not the cause of cargo rebuilding everything).
@@ -235,7 +253,7 @@ cargo: check-rustc
 # 	for kd in $(KERNEL_CRATE_NAMES) ; do  \
 # 		cd $${kd} ; \
 # 		echo -e "\n========= BUILDING KERNEL CRATE $${kd} ==========\n" ; \
-# 		RUST_TARGET_PATH="$(CFG_DIR)" RUSTFLAGS="$(RUSTFLAGS)" \
+# 		RUST_TARGET_PATH='$(CFG_DIR)' RUSTFLAGS='$(RUSTFLAGS)' \
 # 			cargo rustc \
 # 			$(CARGOFLAGS) \
 # 			$(RUST_FEATURES) \
@@ -244,7 +262,7 @@ cargo: check-rustc
 # 	done
 # for app in $(APP_CRATE_NAMES) ; do  \
 # 	cd $${app} ; \
-# 	RUST_TARGET_PATH="$(CFG_DIR)" RUSTFLAGS="$(RUSTFLAGS)" \
+# 	RUST_TARGET_PATH='$(CFG_DIR)' RUSTFLAGS='$(RUSTFLAGS)' \
 # 		cargo rustc \
 # 		$(CARGOFLAGS) \
 # 		--target $(TARGET) \
@@ -259,16 +277,28 @@ $(nano_core_binary): cargo $(nano_core_static_lib) $(assembly_object_files) $(li
 	@mkdir -p $(BUILD_DIR)
 	@mkdir -p $(NANO_CORE_BUILD_DIR)
 	@mkdir -p $(OBJECT_FILES_BUILD_DIR)
-	@mkdir -p $(DEPS_DIR)
+	@mkdir -p $(DEPS_BUILD_DIR)
 
 	$(CROSS)ld -n -T $(linker_script) -o $(nano_core_binary) $(assembly_object_files) $(nano_core_static_lib)
-## run "readelf" on the nano_core binary, remove irrelevant LOCAL symbols from the ELF file, and then demangle it, and then output to a sym file
-	@cargo run --release --manifest-path $(ROOT_DIR)/tools/demangle_readelf_file/Cargo.toml \
-		<($(CROSS)readelf -S -s -W $(nano_core_binary) | sed '/OBJECT  LOCAL .* str\./d;/NOTYPE  LOCAL  /d;/FILE    LOCAL  /d;/SECTION LOCAL  /d;') \
-		>  $(OBJECT_FILES_BUILD_DIR)/$(KERNEL_PREFIX)nano_core.sym
-	@echo -n -e '\0' >> $(OBJECT_FILES_BUILD_DIR)/$(KERNEL_PREFIX)nano_core.sym
-
-
+## Dump readelf output for verification. See pull request #542 for more details:
+##	@cargo run --release --manifest-path $(ROOT_DIR)/tools/demangle_readelf_file/Cargo.toml \
+##		<($(CROSS)readelf -s -W $(nano_core_binary) | sed '/OBJECT  LOCAL .* str\./d;/NOTYPE  LOCAL  /d;/FILE    LOCAL  /d;/SECTION LOCAL  /d;') \
+## 		>  $(ROOT_DIR)/readelf_output
+## run "readelf" on the nano_core binary, remove irrelevant LOCAL symbols from the ELF file, demangle it, serialize it, and then output to a serde file
+	@cargo run --release --manifest-path $(ROOT_DIR)/tools/serialize_nano_core/Cargo.toml \
+		<(cargo run --release --manifest-path $(ROOT_DIR)/tools/demangle_readelf_file/Cargo.toml \
+		<($(CROSS)readelf -S -s -W $(nano_core_binary) \
+		| sed '/OBJECT  LOCAL .* str\./d;/NOTYPE  LOCAL  /d;/FILE    LOCAL  /d;/SECTION LOCAL  /d;')) \
+		> $(OBJECT_FILES_BUILD_DIR)/$(KERNEL_PREFIX)nano_core.serde
+## `.sym`: this doesn't parse the object file at compile time, instead including the modified output of "readelf" as a boot module so it can then
+## be parsed during boot. See pull request #542 for more details.
+##	@cargo run --release --manifest-path $(ROOT_DIR)/tools/demangle_readelf_file/Cargo.toml \
+##		<($(CROSS)readelf -S -s -W $(nano_core_binary) | sed '/OBJECT  LOCAL .* str\./d;/NOTYPE  LOCAL  /d;/FILE    LOCAL  /d;/SECTION LOCAL  /d;') \
+##		>  $(OBJECT_FILES_BUILD_DIR)/$(KERNEL_PREFIX)nano_core.sym
+##	@echo -n -e '\0' >> $(OBJECT_FILES_BUILD_DIR)/$(KERNEL_PREFIX)nano_core.sym
+## `.bin`: this doesn't parse the object file at compile time, instead including the nano_core binary as a boot module so it can then be parsed during
+## boot. See pull request #542 for more details. 
+##	@cp $(nano_core_binary) $(OBJECT_FILES_BUILD_DIR)/$(KERNEL_PREFIX)nano_core.bin
 
 ### This compiles the assembly files in the nano_core. 
 ### This target is currently rebuilt every time to accommodate changing CFLAGS.
@@ -302,8 +332,8 @@ grub:
 extra_files:
 	@mkdir -p $(OBJECT_FILES_BUILD_DIR)
 	@for f in $(shell cd $(EXTRA_FILES) && find * -type f); do \
-		ln -v -f  $(EXTRA_FILES)/$${f}  $(OBJECT_FILES_BUILD_DIR)/`echo -n $${f} | sed 's/\//?/g'` ; \
-	done
+		ln -f  $(EXTRA_FILES)/$${f}  $(OBJECT_FILES_BUILD_DIR)/`echo -n $${f} | sed 's/\//?/g'`  & \
+	done; wait
 
 
 ### Target for building tlibc, Theseus's libc.
@@ -349,7 +379,7 @@ c_test:
 libtheseus: theseus_cargo $(ROOT_DIR)/libtheseus/Cargo.* $(ROOT_DIR)/libtheseus/src/*
 	@( \
 		cd $(ROOT_DIR)/libtheseus && \
-		$(THESEUS_CARGO_BIN) --input $(DEPS_DIR) build; \
+		$(THESEUS_CARGO_BIN) --input $(DEPS_BUILD_DIR) build; \
 	)
 
 
@@ -372,7 +402,7 @@ clean:
 ### All other build files are left intact.
 clean-old-build:
 	@rm -rf $(OBJECT_FILES_BUILD_DIR)
-	@rm -rf $(DEPS_DIR)
+	@rm -rf $(DEPS_BUILD_DIR)
 	@rm -rf $(DEBUG_SYMBOLS_DIR)
 
 
@@ -494,7 +524,7 @@ RUSTDOC_OUT_FILE := $(RUSTDOC_OUT)/___Theseus_Crates___/index.html
 ## Builds Theseus's source-level documentation for all Rust crates except applications.
 ## The entire project is built as normal using the `cargo doc` command (`rustdoc` under the hood).
 docs: doc
-doc: export override RUSTDOCFLAGS += -A private_intra_doc_links
+doc: export override RUSTDOCFLAGS += -A rustdoc::private_intra_doc_links
 doc: check-rustc
 ## Build the docs for select library crates, namely those not hosted online.
 ## We do this first such that the main `cargo doc` invocation below can see and link to these library docs.
@@ -564,13 +594,20 @@ clean-doc:
 help: 
 	@echo -e "\nThe following make targets are available:"
 	@echo -e "   iso:"
-	@echo -e "\t The default and most basic target. Builds the full Theseus OS and creates a bootable ISO image."
+	@echo -e "\t The default and most basic target. Builds Theseus OS with the default feature set and creates a bootable ISO image."
+
+	@echo -e "   all:"
+	@echo -e "   full:"
+	@echo -e "\t Same as 'iso', but builds all Theseus OS crates by enabling all Cargo features ('--all-features')."
 
 	@echo -e "   run:"
-	@echo -e "\t Builds Theseus (like the 'iso' target) and runs it using QEMU."
+	@echo -e "\t Builds Theseus (via the 'iso' target) and runs it using QEMU."
 
 	@echo -e "   loadable:"
 	@echo -e "\t Same as 'run', but enables the 'loadable' configuration so that all crates are dynamically loaded."
+
+	@echo -e "   wasmtime:"
+	@echo -e "\t Same as 'run', but includes the 'wasmtime' crates in the build."
 
 	@echo -e "   run_pause:"
 	@echo -e "\t Same as 'run', but pauses QEMU at its GDB stub entry point,"
@@ -781,6 +818,11 @@ orun_pause:
 ### builds and runs Theseus in loadable mode, where all crates are dynamically loaded.
 loadable : export override THESEUS_CONFIG += loadable
 loadable: run
+
+
+### builds and runs Theseus with wasmtime enabled.
+wasmtime : export override CARGOFLAGS += --features wasmtime
+wasmtime: run
 
 
 ### builds and runs Theseus in QEMU

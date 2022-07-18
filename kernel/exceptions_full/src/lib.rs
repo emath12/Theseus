@@ -3,33 +3,17 @@
 #![no_std]
 #![feature(abi_x86_interrupt)]
 
-extern crate x86_64;
-extern crate task;
-// extern crate apic;
-extern crate tlb_shootdown;
-extern crate pmu_x86;
-#[macro_use] extern crate log;
-#[macro_use] extern crate vga_buffer; // for println_raw!()
-#[macro_use] extern crate print; // for regular println!()
-extern crate unwind;
-extern crate debug_info;
-extern crate signal_handler;
-
-extern crate memory;
-extern crate tss;
-extern crate stack_trace;
-extern crate fault_log;
-
+use log::{warn, debug, trace};
 use memory::{VirtualAddress, Page};
 use signal_handler::{Signal, SignalContext, ErrorCode};
 use x86_64::{
     registers::control::Cr2,
     structures::idt::{
-        LockedIdt,
         InterruptStackFrame,
         PageFaultErrorCode
     },
 };
+use locked_idt::LockedIdt;
 use fault_log::log_exception;
 
 
@@ -78,15 +62,15 @@ pub fn init(idt_ref: &'static LockedIdt) {
 }
 
 
-/// calls println!() and then println_raw!()
+/// calls print!() and then print_raw!()
 macro_rules! println_both {
     ($fmt:expr) => {
-        print_raw!(concat!($fmt, "\n"));
-        print!(concat!($fmt, "\n"));
+        vga_buffer::print_raw!(concat!($fmt, "\n"));
+        print::print!(concat!($fmt, "\n"));
     };
     ($fmt:expr, $($arg:tt)*) => {
-        print_raw!(concat!($fmt, "\n"), $($arg)*);
-        print!(concat!($fmt, "\n"), $($arg)*);
+        vga_buffer::print_raw!(concat!($fmt, "\n"), $($arg)*);
+        print::print!(concat!($fmt, "\n"), $($arg)*);
     };
 }
 
@@ -183,19 +167,13 @@ fn kill_and_halt(
     let cause = task::KillReason::Exception(exception_number);
 
     // Call this task's kill handler, if it has one.
-    {
-        let kill_handler = task::get_my_current_task().and_then(|t| t.take_kill_handler());
-        if let Some(ref kh_func) = kill_handler {
-
-            #[cfg(not(downtime_eval))]
-            debug!("Found kill handler callback to invoke in Task {:?}", task::get_my_current_task());
-
-            kh_func(&cause);
-        }
-        else {
-            #[cfg(not(downtime_eval))]
-            debug!("No kill handler callback in Task {:?}", task::get_my_current_task());
-        }
+    if let Some(ref kh_func) = task::take_kill_handler() {
+        #[cfg(not(downtime_eval))]
+        debug!("Found kill handler callback to invoke in Task {:?}", task::get_my_current_task());
+        kh_func(&cause);
+    } else {
+        #[cfg(not(downtime_eval))]
+        debug!("No kill handler callback in Task {:?}", task::get_my_current_task());
     }
 
     // Invoke the proper signal handler registered for this task, if one exists.

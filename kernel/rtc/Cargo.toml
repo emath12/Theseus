@@ -3,11 +3,10 @@ authors = ["Kevin Boos <kevinaboos@gmail.com>"]
 name = "rtc"
 description = "Support for the Real-time Clock chip on x86 processors"
 version = "0.1.0"
-build = "../../build.rs"
 
 [dependencies]
 spin = "0.9.0"
-x86_64 = { path = "../../libs/x86_64" }
+x86_64 = "0.14.8"
 
 [dependencies.lazy_static]
 features = ["spin_no_std"]

@@ -3,11 +3,10 @@ authors = ["Kevin Boos <kevinaboos@gmail.com>"]
 name = "tss"
 description = "TSS (Task State Segment support (x86 only) for Theseus"
 version = "0.1.0"
-build = "../../build.rs"
 
 [dependencies]
 spin = "0.9.0"
-x86_64 = { path = "../../libs/x86_64" } # currently using our local copy, forked from Phil Opp's crate
+x86_64 = "0.14.8"
 
 
 [dependencies.log]
