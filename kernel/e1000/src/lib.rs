@@ -241,6 +241,8 @@ impl E1000Nic {
             tx_descs: tx_descs,
             num_tx_descs: E1000_NUM_TX_DESC,
             tx_cur: 0,
+            tx_clean: 0,
+            tx_bufs_in_use: VecDeque::with_capacity(E1000_NUM_TX_DESC as usize),
             cpu_id: None,
         };
 
