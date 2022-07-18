@@ -50,11 +50,11 @@ mod mapped_pages_fragments;
 pub mod test_packets;
 mod descriptors;
 mod queues;
+mod nic_states;
 
 use regs::*;
 use queue_registers::*;
 use mapped_pages_fragments::MappedPagesFragments;
-use descriptors::AdvancedTxDescriptor;
 use queues::{TxQueue, IxgbeTxDescriptors};
 
 use spin::Once;
@@ -67,9 +67,9 @@ use alloc::{
 use irq_safety::MutexIrqSafe;
 use memory::{PhysicalAddress, MappedPages};
 use pci::{PciDevice, MSIX_CAPABILITY, PciConfigSpaceAccessMechanism, PciLocation};
-use bit_field::BitField;
+// use bit_field::BitField;
 // use interrupts::register_msi_interrupt;
-use x86_64::structures::idt::HandlerFunc;
+// use x86_64::structures::idt::HandlerFunc;
 use hpet::get_hpet;
 use network_interface_card::NetworkInterfaceCard;
 use nic_initialization::{allocate_memory};
@@ -252,39 +252,31 @@ impl IxgbeNic {
     pub fn init(
         ixgbe_pci_dev: &PciDevice,
         dev_id: PciLocation,
-        enable_virtualization: bool,
-        interrupts: Option<Vec<HandlerFunc>>,
-        enable_rss: bool,
-        _rx_buffer_size_kbytes: RxBufferSizeKiB,
-        num_rx_descriptors: u16,
-        num_tx_descriptors: u16
+        // enable_virtualization: bool,
+        // interrupts: Option<Vec<HandlerFunc>>,
+        // enable_rss: bool,
+        // _rx_buffer_size_kbytes: RxBufferSizeKiB,
+        // num_rx_descriptors: u16,
+        num_tx_descriptors: NumDesc
     ) -> Result<MutexIrqSafe<IxgbeNic>, &'static str> {
-        // Series of checks to determine if starting parameters are acceptable
-        if (enable_virtualization && interrupts.is_some()) || (enable_virtualization && enable_rss) {
-            return Err("Cannot enable virtualization when interrupts or RSS are enabled");
-        }
+        // // Series of checks to determine if starting parameters are acceptable
+        // if (enable_virtualization && interrupts.is_some()) || (enable_virtualization && enable_rss) {
+        //     return Err("Cannot enable virtualization when interrupts or RSS are enabled");
+        // }
 
-        if let Some(ref ints) = interrupts {
-            if ints.len() > IXGBE_NUM_RX_QUEUES_ENABLED as usize {
-                return Err("The number of interrupts must be less than or equal to the number of Rx queues enabled");
-            }
-        }
+        // if let Some(ref ints) = interrupts {
+        //     if ints.len() > IXGBE_NUM_RX_QUEUES_ENABLED as usize {
+        //         return Err("The number of interrupts must be less than or equal to the number of Rx queues enabled");
+        //     }
+        // }
 
-        if num_rx_descriptors > IXGBE_MAX_RX_DESC {
-            return Err("We can have a maximum of 8K receive descriptors per queue");
-        }
+        // if num_rx_descriptors > IXGBE_MAX_RX_DESC {
+        //     return Err("We can have a maximum of 8K receive descriptors per queue");
+        // }
 
         // if (num_rx_descriptors as usize * core::mem::size_of::<AdvancedRxDescriptor>()) % 128 != 0 {
         //     return Err("The total length in bytes of the Rx descriptor ring must be 128-byte aligned");
         // }
-
-        if num_tx_descriptors > IXGBE_MAX_TX_DESC {
-            return Err("We can have a maximum of 8K transmit descriptors per queue");
-        }
-
-        if (num_tx_descriptors as usize * core::mem::size_of::<AdvancedTxDescriptor>()) % 128 != 0 {
-            return Err("The total length in bytes of the Tx descriptor ring must be 128-byte aligned");
-        }
 
         // Start the initialization procedure
 
@@ -504,27 +496,27 @@ impl IxgbeNic {
         }
         Ok(pointers_to_queues)
     }
-    /// Returns the memory mapped msix vector table
-    pub fn mem_map_msix(dev: &PciDevice) -> Result<BoxRefMut<MappedPages, MsixVectorTable>, &'static str> {
-        // retreive the address in the pci config space for the msi-x capability
-        let cap_addr = dev.find_pci_capability(MSIX_CAPABILITY).ok_or("ixgbe: device does not have MSI-X capability")?;
-        // find the BAR used for msi-x
-        let vector_table_offset = 4;
-        let table_offset = dev.pci_read_32(cap_addr + vector_table_offset);
-        let bar = table_offset & 0x7;
-        let offset = table_offset >> 3;
-        // find the memory base address and size of the area for the vector table
-        let mem_base = PhysicalAddress::new((dev.bars[bar as usize] + offset) as usize)
-            .ok_or("ixgbe: the mem_base physical address specified in the BAR was invalid")?;
-        let mem_size_in_bytes = core::mem::size_of::<MsixVectorEntry>() * IXGBE_MAX_MSIX_VECTORS;
+    // /// Returns the memory mapped msix vector table
+    // pub fn mem_map_msix(dev: &PciDevice) -> Result<BoxRefMut<MappedPages, MsixVectorTable>, &'static str> {
+    //     // retreive the address in the pci config space for the msi-x capability
+    //     let cap_addr = dev.find_pci_capability(MSIX_CAPABILITY).ok_or("ixgbe: device does not have MSI-X capability")?;
+    //     // find the BAR used for msi-x
+    //     let vector_table_offset = 4;
+    //     let table_offset = dev.pci_read_32(cap_addr + vector_table_offset);
+    //     let bar = table_offset & 0x7;
+    //     let offset = table_offset >> 3;
+    //     // find the memory base address and size of the area for the vector table
+    //     let mem_base = PhysicalAddress::new((dev.bars[bar as usize] + offset) as usize)
+    //         .ok_or("ixgbe: the mem_base physical address specified in the BAR was invalid")?;
+    //     let mem_size_in_bytes = core::mem::size_of::<MsixVectorEntry>() * IXGBE_MAX_MSIX_VECTORS;
 
-        // debug!("msi-x vector table bar: {}, base_address: {:#X} and size: {} bytes", bar, mem_base, mem_size_in_bytes);
+    //     // debug!("msi-x vector table bar: {}, base_address: {:#X} and size: {} bytes", bar, mem_base, mem_size_in_bytes);
 
-        let msix_mapped_pages = allocate_memory(mem_base, mem_size_in_bytes)?;
-        let vector_table = BoxRefMut::new(Box::new(msix_mapped_pages)).try_map_mut(|mp| mp.as_type_mut::<MsixVectorTable>(0))?;
+    //     let msix_mapped_pages = allocate_memory(mem_base, mem_size_in_bytes)?;
+    //     let vector_table = BoxRefMut::new(Box::new(msix_mapped_pages)).try_map_mut(|mp| mp.as_type_mut::<MsixVectorTable>(0))?;
 
-        Ok(vector_table)
-    }
+    //     Ok(vector_table)
+    // }
 
     pub fn spoof_mac(&mut self, spoofed_mac_addr: [u8; 6]) {
         self.mac_spoofed = Some(spoofed_mac_addr);
@@ -692,16 +684,16 @@ impl IxgbeNic {
             val = regs2.rdrxctl_read();
         }
 
-        while Self::acquire_semaphore(regs3)? {
-            //wait 10 ms
-            let _ =pit_clock::pit_wait(wait_time);
-        }
-
         // setup PHY and the link 
+        // while Self::acquire_semaphore(regs3)? {
+        //     //wait 10 ms
+        //     let _ =pit_clock::pit_wait(wait_time);
+        // }
+
         // From looking at other drivers and testing, it seems these registers are set automatically 
         // and driver doesn't need to configure link speed manually.
 
-        Self::release_semaphore(regs3)?;        
+        // Self::release_semaphore(regs3)?;        
 
         // debug!("STATUS: {:#X}", regs1.status.read()); 
         // debug!("CTRL: {:#X}", regs1.ctrl.read());
@@ -845,7 +837,7 @@ impl IxgbeNic {
     /// # Arguments
     /// * `num_desc`: number of descriptors in the queue
     /// * `txq_regs`: registers needed to set up a transmit queue
-    fn init_tx_queue(num_desc: usize, txq_regs: IxgbeTxQueueRegisters) 
+    fn init_tx_queue(num_desc: NumDesc, txq_regs: IxgbeTxQueueRegisters) 
         -> Result<TxQueue, &'static str> 
     {
         let tx_descs = IxgbeTxDescriptors::new(num_desc)?;
@@ -858,7 +850,7 @@ impl IxgbeNic {
         regs: &mut IntelIxgbeRegisters2, 
         regs_mac: &mut IntelIxgbeMacRegisters, 
         tx_regs: Vec<IxgbeTxQueueRegisters>,
-        num_tx_descs: u16
+        num_tx_descs: NumDesc
     ) -> Result<Vec<TxQueue>, &'static str> {
         // disable transmission
         regs.dmatxctl_disable_tx();
@@ -887,7 +879,7 @@ impl IxgbeNic {
         regs.dmatxctl_enable_tx();
 
         for tx_reg in tx_regs {
-            let mut txq = Self::init_tx_queue(num_tx_descs as usize, tx_reg)?;
+            let mut txq = Self::init_tx_queue(num_tx_descs, tx_reg)?;
         
             // Set descriptor thresholds
             // If we enable this then we need to change the packet send function to stop polling
@@ -1242,6 +1234,15 @@ pub enum FilterProtocol {
     Udp = 1,
     Sctp = 2,
     Other = 3
+}
+
+#[derive(Copy, Clone)]
+pub enum NumDesc {
+    Descs16 = 16,
+    Descs1k = 1024,
+    Descs2k = 2048,
+    Descs4k = 4096,
+    Descs8k = 8192
 }
 
 // /// A helper function to poll the nic receive queues (only for testing purposes).

@@ -144,20 +144,19 @@ pub fn init(key_producer: Queue<Event>, mouse_producer: Queue<Event>) -> Result<
                 
                 // Initialization parameters of the NIC.
                 // These can be changed according to the requirements specified in the ixgbe init function.
-                const VIRT_ENABLED: bool = true;
-                const RSS_ENABLED: bool = false;
-                const RX_DESCS: u16 = 8;
-                const TX_DESCS: u16 = 8;
+                // const VIRT_ENABLED: bool = true;
+                // const RSS_ENABLED: bool = false;
+                // const RX_DESCS: u16 = 8;
                 
                 let ixgbe_nic = ixgbe_intralingual::IxgbeNic::init(
                     dev, 
                     dev.location,
-                    VIRT_ENABLED, 
-                    None, 
-                    RSS_ENABLED, 
-                    ixgbe_intralingual::RxBufferSizeKiB::Buffer2KiB,
-                    RX_DESCS,
-                    TX_DESCS
+                    // VIRT_ENABLED, 
+                    // None, 
+                    // RSS_ENABLED, 
+                    // ixgbe_intralingual::RxBufferSizeKiB::Buffer2KiB,
+                    // RX_DESCS,
+                    ixgbe_intralingual::NumDesc::Descs16
                 )?;
 
                 ixgbe_devs.push(ixgbe_nic);

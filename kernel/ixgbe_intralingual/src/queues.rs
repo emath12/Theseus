@@ -1,7 +1,8 @@
 use memory::{MappedPages, create_contiguous_mapping, PhysicalAddress};
 use crate::descriptors::AdvancedTxDescriptor;
 use crate::queue_registers::IxgbeTxQueueRegisters;
-use crate::nic_buffers::TransmitBuffer;
+use crate::NumDesc;
+use nic_buffers::TransmitBuffer;
 use owning_ref::BoxRefMut;
 use core::{ops::{DerefMut, Deref}};
 use nic_initialization::NIC_MAPPING_FLAGS;
@@ -65,19 +66,26 @@ pub struct IxgbeTxDescriptors {
 }
 
 impl IxgbeTxDescriptors {
-    pub fn new(num_desc: usize) -> Result<IxgbeTxDescriptors, &'static str> {
-        let size_in_bytes_of_all_tx_descs = num_desc * core::mem::size_of::<AdvancedTxDescriptor>();
+    pub fn new(num_desc: NumDesc) -> Result<IxgbeTxDescriptors, &'static str> {
+        let size_in_bytes_of_all_tx_descs = num_desc as usize * core::mem::size_of::<AdvancedTxDescriptor>();
         
         // Tx descriptors must be 128 byte-aligned, which is satisfied below because it's aligned to a page boundary.
         let (tx_descs_mapped_pages, tx_descs_starting_phys_addr) = create_contiguous_mapping(size_in_bytes_of_all_tx_descs, NIC_MAPPING_FLAGS)?;
-        
-        let mut desc_ring = BoxRefMut::new(Box::new(tx_descs_mapped_pages))
-            .try_map_mut(|mp| mp.as_slice_mut::<AdvancedTxDescriptor>(0, num_desc))?;
+        let offset_in_mp = 0;
 
+        if (tx_descs_starting_phys_addr.value() + offset_in_mp) % 128 != 0 {
+            return Err("Descriptors are not 128-byte aligned");
+        }
+
+        let mut desc_ring = BoxRefMut::new(Box::new(tx_descs_mapped_pages))
+            .try_map_mut(|mp| mp.as_slice_mut::<AdvancedTxDescriptor>(offset_in_mp, num_desc as usize))?;
+
+        
         for desc in desc_ring.iter_mut() {
             desc.init()
         }
-        Ok(IxgbeTxDescriptors { desc_ring, paddr: tx_descs_starting_phys_addr })
+
+        Ok(IxgbeTxDescriptors{ desc_ring, paddr: tx_descs_starting_phys_addr + offset_in_mp })
     }
 }
 
@@ -93,3 +101,4 @@ impl DerefMut for IxgbeTxDescriptors {
         &mut self.desc_ring
     }
 }
+

@@ -11,7 +11,6 @@ use alloc::{
 };
 use core::ops::{Deref, DerefMut};
 use core::mem::ManuallyDrop;
-use nic_queues::{TxQueueRegisters};
 use memory::MappedPages;
 
 
@@ -24,23 +23,6 @@ pub struct IxgbeRxQueueRegisters {
     pub backing_pages: Arc<MappedPages>
 }
 
-// impl RxQueueRegisters for IxgbeRxQueueRegisters {
-//     fn set_rdbal(&mut self, value: u32) {
-//         self.regs.rdbal.write(value)
-//     }    
-//     fn set_rdbah(&mut self, value: u32) {
-//         self.regs.rdbah.write(value)
-//     }
-//     fn set_rdlen(&mut self, value: u32) {
-//         self.regs.rdlen.write(value)
-//     }
-//     fn set_rdh(&mut self, value: u32) {
-//         self.regs.rdh.write(value)
-//     }
-//     fn set_rdt(&mut self, value: u32) {
-//         self.regs.rdt.write(value)
-//     }
-// }
 impl Deref for IxgbeRxQueueRegisters {
     type Target = Box<RegistersRx>;
     fn deref(&self) -> &Box<RegistersRx> {
@@ -75,24 +57,6 @@ impl IxgbeTxQueueRegisters {
 
     pub fn id(&self) -> usize {
         self.id
-    }
-}
-
-impl TxQueueRegisters for IxgbeTxQueueRegisters {
-    fn set_tdbal(&mut self, value: u32) {
-        self.regs.tdbal.write(value)
-    }  
-    fn set_tdbah(&mut self, value: u32) {
-        self.regs.tdbah.write(value)
-    }
-    fn set_tdlen(&mut self, value: u32) {
-        self.regs.tdlen.write(value)
-    }
-    fn set_tdh(&mut self, value: u32) {
-        self.regs.tdh.write(value)
-    }
-    fn set_tdt(&mut self, value: u32) {
-        self.regs.tdt.write(value)
     }
 }
 
