@@ -1143,6 +1143,27 @@
 <span id="1138">1138</span>
 <span id="1139">1139</span>
 <span id="1140">1140</span>
+<span id="1141">1141</span>
+<span id="1142">1142</span>
+<span id="1143">1143</span>
+<span id="1144">1144</span>
+<span id="1145">1145</span>
+<span id="1146">1146</span>
+<span id="1147">1147</span>
+<span id="1148">1148</span>
+<span id="1149">1149</span>
+<span id="1150">1150</span>
+<span id="1151">1151</span>
+<span id="1152">1152</span>
+<span id="1153">1153</span>
+<span id="1154">1154</span>
+<span id="1155">1155</span>
+<span id="1156">1156</span>
+<span id="1157">1157</span>
+<span id="1158">1158</span>
+<span id="1159">1159</span>
+<span id="1160">1160</span>
+<span id="1161">1161</span>
 </pre><pre class="rust"><code><span class="doccomment">//! This crate contains the `Task` structure for supporting multithreading, </span>
 <span class="doccomment">//! and the associated code for dealing with tasks.</span>
 <span class="doccomment">//! </span>
@@ -1219,16 +1240,17 @@
 <span class="kw">pub</span> <span class="kw">type</span> <span class="ident">KillHandler</span> <span class="op">=</span> <span class="ident">Box</span><span class="op">&lt;</span><span class="ident">dyn</span> <span class="ident">Fn</span>(<span class="kw-2">&amp;</span><span class="ident">KillReason</span>) <span class="op">+</span> <span class="ident">Send</span><span class="op">&gt;</span>;
 
 <span class="doccomment">/// Just like `core::panic::PanicInfo`, but with owned String types instead of &amp;str references.</span>
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>)]</span>
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Default</span>)]</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">PanicInfoOwned</span> {
-    <span class="kw">pub</span> <span class="ident">msg</span>:    <span class="ident">String</span>,
-    <span class="kw">pub</span> <span class="ident">file</span>:   <span class="ident">String</span>,
-    <span class="kw">pub</span> <span class="ident">line</span>:   <span class="ident">u32</span>, 
-    <span class="kw">pub</span> <span class="ident">column</span>: <span class="ident">u32</span>,
+    <span class="kw">pub</span> <span class="ident">payload</span>:  <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">Box</span><span class="op">&lt;</span><span class="ident">dyn</span> <span class="ident">Any</span> <span class="op">+</span> <span class="ident">Send</span><span class="op">&gt;</span><span class="op">&gt;</span>,
+    <span class="kw">pub</span> <span class="ident">msg</span>:      <span class="ident">String</span>,
+    <span class="kw">pub</span> <span class="ident">file</span>:     <span class="ident">String</span>,
+    <span class="kw">pub</span> <span class="ident">line</span>:     <span class="ident">u32</span>, 
+    <span class="kw">pub</span> <span class="ident">column</span>:   <span class="ident">u32</span>,
 }
 <span class="kw">impl</span> <span class="ident">fmt::Display</span> <span class="kw">for</span> <span class="ident">PanicInfoOwned</span> {
     <span class="kw">fn</span> <span class="ident">fmt</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">f</span>: <span class="kw-2">&amp;mut</span> <span class="ident">fmt::Formatter</span>) -&gt; <span class="prelude-ty">Result</span><span class="op">&lt;</span>(), <span class="ident">fmt::Error</span><span class="op">&gt;</span> {
-        <span class="macro">write!</span>(<span class="ident">f</span>, <span class="string">&quot;{:?}:{}:{} -- {:?}&quot;</span>, <span class="self">self</span>.<span class="ident">file</span>, <span class="self">self</span>.<span class="ident">line</span>, <span class="self">self</span>.<span class="ident">column</span>, <span class="self">self</span>.<span class="ident">msg</span>)
+        <span class="macro">write!</span>(<span class="ident">f</span>, <span class="string">&quot;{}:{}:{} -- {:?}&quot;</span>, <span class="self">self</span>.<span class="ident">file</span>, <span class="self">self</span>.<span class="ident">line</span>, <span class="self">self</span>.<span class="ident">column</span>, <span class="self">self</span>.<span class="ident">msg</span>)
     }
 }
 <span class="kw">impl</span><span class="op">&lt;</span><span class="lifetime">&#39;p</span><span class="op">&gt;</span> <span class="ident">From</span><span class="op">&lt;</span><span class="kw-2">&amp;</span><span class="ident">PanicInfo</span><span class="op">&lt;</span><span class="lifetime">&#39;p</span><span class="op">&gt;</span><span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">PanicInfoOwned</span> {
@@ -1242,7 +1264,19 @@
             (<span class="ident">String::new</span>(), <span class="number">0</span>, <span class="number">0</span>)
         };
 
-        <span class="ident">PanicInfoOwned</span> { <span class="ident">msg</span>, <span class="ident">file</span>, <span class="ident">line</span>, <span class="ident">column</span> }
+        <span class="ident">PanicInfoOwned</span> { <span class="ident">payload</span>: <span class="prelude-val">None</span>, <span class="ident">msg</span>, <span class="ident">file</span>, <span class="ident">line</span>, <span class="ident">column</span> }
+    }
+}
+<span class="kw">impl</span> <span class="ident">PanicInfoOwned</span> {
+    <span class="doccomment">/// Constructs a new `PanicInfoOwned` object containing only the given `payload`</span>
+    <span class="doccomment">/// without any location or message info.</span>
+    <span class="doccomment">/// </span>
+    <span class="doccomment">/// Useful for forwarding panic payloads through a catch and resume unwinding sequence.</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">from_payload</span>(<span class="ident">payload</span>: <span class="ident">Box</span><span class="op">&lt;</span><span class="ident">dyn</span> <span class="ident">Any</span> <span class="op">+</span> <span class="ident">Send</span><span class="op">&gt;</span>) -&gt; <span class="ident">PanicInfoOwned</span> {
+        <span class="ident">PanicInfoOwned</span> {
+            <span class="ident">payload</span>: <span class="prelude-val">Some</span>(<span class="ident">payload</span>),
+            ..<span class="ident">Default::default</span>()
+        }
     }
 }
 
@@ -1259,11 +1293,33 @@
 }
 
 
-<span class="doccomment">/// Sets the kill handler function for the current `Task`</span>
-<span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">set_my_kill_handler</span>(<span class="ident">handler</span>: <span class="ident">KillHandler</span>) -&gt; <span class="prelude-ty">Result</span><span class="op">&lt;</span>(), <span class="kw-2">&amp;</span><span class="lifetime">&#39;static</span> <span class="ident">str</span><span class="op">&gt;</span> {
+<span class="doccomment">/// Registers a kill handler function for the current `Task`.</span>
+<span class="doccomment">/// </span>
+<span class="doccomment">/// [`KillHandler`]s are called when a `Task` panics or otherwise fails</span>
+<span class="doccomment">/// (e.g., due to a machine exception).</span>
+<span class="doccomment">///</span>
+<span class="doccomment">/// # Locking / Deadlock</span>
+<span class="doccomment">/// Obtains the lock on this `Task`&#39;s inner state in order to mutate it.</span>
+<span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">set_kill_handler</span>(<span class="ident">function</span>: <span class="ident">KillHandler</span>) -&gt; <span class="prelude-ty">Result</span><span class="op">&lt;</span>(), <span class="kw-2">&amp;</span><span class="lifetime">&#39;static</span> <span class="ident">str</span><span class="op">&gt;</span> {
     <span class="ident">get_my_current_task</span>()
-        .<span class="ident">ok_or</span>(<span class="string">&quot;couldn&#39;t get_my_current_task&quot;</span>)
-        .<span class="ident">map</span>(<span class="op">|</span><span class="ident">taskref</span><span class="op">|</span> <span class="ident">taskref</span>.<span class="ident">set_kill_handler</span>(<span class="ident">handler</span>))
+        .<span class="ident">ok_or</span>(<span class="string">&quot;couldn&#39;t get current task&quot;</span>)
+        .<span class="ident">map</span>(<span class="op">|</span><span class="ident">t</span><span class="op">|</span> <span class="ident">t</span>.<span class="ident">inner</span>.<span class="ident">lock</span>().<span class="ident">kill_handler</span> <span class="op">=</span> <span class="prelude-val">Some</span>(<span class="ident">function</span>))
+}
+
+
+<span class="doccomment">/// Takes ownership of the current `Task`&#39;s [`KillHandler`] function.</span>
+<span class="doccomment">/// </span>
+<span class="doccomment">/// The registered `KillHandler` function is removed from the current task,</span>
+<span class="doccomment">/// if it exists, and returned such that it can be invoked without holding</span>
+<span class="doccomment">/// the `Task`&#39;s inner lock.</span>
+<span class="doccomment">/// </span>
+<span class="doccomment">/// After invoking this, the current task&#39;s kill handler will be `None`.</span>
+<span class="doccomment">///</span>
+<span class="doccomment">/// # Locking / Deadlock</span>
+<span class="doccomment">/// Obtains the lock on this `Task`&#39;s inner state in order to mutate it.</span>
+<span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">take_kill_handler</span>() -&gt; <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">KillHandler</span><span class="op">&gt;</span> {
+    <span class="ident">get_my_current_task</span>()
+        .<span class="ident">and_then</span>(<span class="op">|</span><span class="ident">t</span><span class="op">|</span> <span class="ident">t</span>.<span class="ident">inner</span>.<span class="ident">lock</span>().<span class="ident">kill_handler</span>.<span class="ident">take</span>())
 }
 
 
@@ -1713,27 +1769,6 @@
         <span class="self">self</span>.<span class="ident">inner</span>.<span class="ident">lock</span>().<span class="ident">restart_info</span>.<span class="ident">is_some</span>()
     }
 
-    <span class="doccomment">/// Registers a function or closure that will be called if this `Task` panics</span>
-    <span class="doccomment">/// or otherwise fails (e.g., due to a machine exception).</span>
-    <span class="doccomment">///</span>
-    <span class="doccomment">/// The given `callback` will be invoked before the task is cleaned up via stack unwinding.</span>
-    <span class="doccomment">///</span>
-    <span class="doccomment">/// # Locking / Deadlock</span>
-    <span class="doccomment">/// Obtains the lock on this `Task`&#39;s inner state in order to mutate it.</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">set_kill_handler</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">callback</span>: <span class="ident">KillHandler</span>) {
-        <span class="self">self</span>.<span class="ident">inner</span>.<span class="ident">lock</span>().<span class="ident">kill_handler</span> <span class="op">=</span> <span class="prelude-val">Some</span>(<span class="ident">callback</span>);
-    }
-
-    <span class="doccomment">/// Takes ownership of this `Task`&#39;s `KillHandler` closure/function if one exists,</span>
-    <span class="doccomment">/// and returns it so it can be invoked without holding this `Task`&#39;s inner lock.</span>
-    <span class="doccomment">/// After invoking this, the `Task`&#39;s `kill_handler` will be `None`.</span>
-    <span class="doccomment">///</span>
-    <span class="doccomment">/// # Locking / Deadlock</span>
-    <span class="doccomment">/// Obtains the lock on this `Task`&#39;s inner state in order to mutate it.</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">take_kill_handler</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">KillHandler</span><span class="op">&gt;</span> {
-        <span class="self">self</span>.<span class="ident">inner</span>.<span class="ident">lock</span>().<span class="ident">kill_handler</span>.<span class="ident">take</span>()
-    }
-
     <span class="doccomment">/// Takes ownership of this `Task`&#39;s exit value and returns it,</span>
     <span class="doccomment">/// if and only if this `Task` was in the `Exited` runstate.</span>
     <span class="doccomment">///</span>
@@ -1958,10 +1993,12 @@
 
         <span class="comment">// Now, as a final action, we drop any data that the original previous task </span>
         <span class="comment">// prepared for droppage before the context switch occurred.</span>
-        <span class="kw">let</span> <span class="ident">_prev_task_data_to_drop</span> <span class="op">=</span> {
-            <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">inner</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">inner</span>.<span class="ident">lock</span>(); <span class="comment">// ensure the lock is released</span>
-            <span class="ident">inner</span>.<span class="ident">drop_after_task_switch</span>.<span class="ident">take</span>()
-        };
+        {
+            <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">inner</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">inner</span>.<span class="ident">lock</span>();
+            <span class="kw">let</span> <span class="ident">prev_task_data_to_drop</span> <span class="op">=</span> <span class="ident">inner</span>.<span class="ident">drop_after_task_switch</span>.<span class="ident">take</span>();
+            <span class="ident">drop</span>(<span class="ident">inner</span>); <span class="comment">// release the lock as soon as possible</span>
+            <span class="ident">drop</span>(<span class="ident">prev_task_data_to_drop</span>);
+        }
     }
 }
 
@@ -1974,11 +2011,10 @@
         <span class="comment">// This is because if an application task sets a kill handler that is a closure/function in the text section of the app crate itself,</span>
         <span class="comment">// then after the app crate is released, the kill handler will be dropped AFTER the app crate has been freed.</span>
         <span class="comment">// When it tries to drop the task&#39;s kill handler, a page fault will occur because the text section of the app crate has been unmapped.</span>
-        {
-            <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Some</span>(<span class="ident">_kill_handler</span>) <span class="op">=</span> <span class="self">self</span>.<span class="ident">take_kill_handler</span>() {
-                <span class="macro">warn!</span>(<span class="string">&quot;While dropping task {:?}, its kill handler callback was still present. Removing it now.&quot;</span>, <span class="self">self</span>);
-            }
-        } <span class="comment">// Scoping rules ensure the kill handler is dropped now, before this Task&#39;s app_crate could possibly be dropped.</span>
+        <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Some</span>(<span class="ident">kill_handler</span>) <span class="op">=</span> <span class="self">self</span>.<span class="ident">inner</span>.<span class="ident">lock</span>().<span class="ident">kill_handler</span>.<span class="ident">take</span>() {
+            <span class="macro">warn!</span>(<span class="string">&quot;While dropping task {:?}, its kill handler callback was still present. Removing it now.&quot;</span>, <span class="self">self</span>);
+            <span class="ident">drop</span>(<span class="ident">kill_handler</span>);
+        }
     }
 }
 
@@ -2005,7 +2041,7 @@
 <span class="doccomment">/// two `TaskRef`s are considered equal if they point to the same underlying `Task`.</span>
 <span class="doccomment">/// </span>
 <span class="doccomment">/// `TaskRef` also auto-derefs into an immutable `Task` reference.</span>
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Hash</span>)]</span>
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>)]</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">TaskRef</span>(<span class="ident">Arc</span><span class="op">&lt;</span><span class="ident">Task</span><span class="op">&gt;</span>);
 
 <span class="kw">impl</span> <span class="ident">TaskRef</span> {
@@ -2146,7 +2182,7 @@
             <span class="comment">// we must clean it up now rather than in `task_switch()`, as it will never be scheduled in again.</span>
             <span class="kw">if</span> <span class="op">!</span><span class="self">self</span>.<span class="number">0</span>.<span class="ident">is_running</span>() {
                 <span class="macro">trace!</span>(<span class="string">&quot;internal_exit(): dropping TaskLocalData for non-running task {}&quot;</span>, <span class="kw-2">&amp;</span><span class="kw-2">*</span><span class="self">self</span>.<span class="number">0</span>);
-                <span class="kw">let</span> <span class="ident">_tld</span> <span class="op">=</span> <span class="ident">inner</span>.<span class="ident">task_local_data</span>.<span class="ident">take</span>();
+                <span class="ident">drop</span>(<span class="ident">inner</span>.<span class="ident">task_local_data</span>.<span class="ident">take</span>());
             }
         }
 
@@ -2168,6 +2204,12 @@
     }
 }
 <span class="kw">impl</span> <span class="ident">Eq</span> <span class="kw">for</span> <span class="ident">TaskRef</span> { }
+
+<span class="kw">impl</span> <span class="ident">Hash</span> <span class="kw">for</span> <span class="ident">TaskRef</span> {
+    <span class="kw">fn</span> <span class="ident">hash</span><span class="op">&lt;</span><span class="ident">H</span>: <span class="ident">Hasher</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">state</span>: <span class="kw-2">&amp;mut</span> <span class="ident">H</span>) {
+        <span class="ident">Arc::as_ptr</span>(<span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0</span>).<span class="ident">hash</span>(<span class="ident">state</span>);
+    }
+}
 
 <span class="kw">impl</span> <span class="ident">Deref</span> <span class="kw">for</span> <span class="ident">TaskRef</span> {
     <span class="kw">type</span> <span class="ident">Target</span> <span class="op">=</span> <span class="ident">Task</span>;

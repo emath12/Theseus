@@ -1045,23 +1045,35 @@
 <span id="1040">1040</span>
 <span id="1041">1041</span>
 <span id="1042">1042</span>
+<span id="1043">1043</span>
+<span id="1044">1044</span>
+<span id="1045">1045</span>
+<span id="1046">1046</span>
+<span id="1047">1047</span>
+<span id="1048">1048</span>
+<span id="1049">1049</span>
+<span id="1050">1050</span>
+<span id="1051">1051</span>
+<span id="1052">1052</span>
+<span id="1053">1053</span>
+<span id="1054">1054</span>
+<span id="1055">1055</span>
+<span id="1056">1056</span>
 </pre><pre class="rust"><code><span class="doccomment">//! Defines types that contain metadata about crates loaded in Theseus and their dependencies.</span>
 <span class="doccomment">//! </span>
-<span class="doccomment">//! #Representing dependencies between sections</span>
-<span class="doccomment">//! Dependencies work as follows:</span>
-<span class="doccomment">//!  </span>
+<span class="doccomment">//! ## Representing dependencies between sections</span>
 <span class="doccomment">//! If one section `A` references or uses another section `B`, </span>
 <span class="doccomment">//! then we colloquially say that *`A` depends on `B`*. </span>
 <span class="doccomment">//! </span>
-<span class="doccomment">//! In this scenario, `A` has a `StrongDependency` on `B`,</span>
-<span class="doccomment">//! and `B` has a `WeakDependent` pointing back to `A`. </span>
+<span class="doccomment">//! In this scenario, `A` has a [`StrongDependency`] on `B`,</span>
+<span class="doccomment">//! and `B` has a [`WeakDependent`] pointing back to `A`. </span>
 <span class="doccomment">//! </span>
-<span class="doccomment">//! Assuming `A` and `B` are both `LoadedSection` objects,</span>
-<span class="doccomment">//! then `B.sections_i_depend_on` includes a `StrongDependency(A)`</span>
-<span class="doccomment">//! and `A.sections_dependent_on_me` includes a `WeakDependent(B)`.</span>
+<span class="doccomment">//! Assuming `A` and `B` are both [`LoadedSection`] objects,</span>
+<span class="doccomment">//! then [`A.sections_i_depend_on`] includes a `StrongDependency(B)`</span>
+<span class="doccomment">//! and [`B.sections_dependent_on_me`] includes a `WeakDependent(A)`.</span>
 <span class="doccomment">//!  </span>
 <span class="doccomment">//! In this way, the dependency graphs are fully associative,</span>
-<span class="doccomment">//! allowing a given `LoadedSection` to easily find </span>
+<span class="doccomment">//! allowing a given [`LoadedSection`] to easily find </span>
 <span class="doccomment">//! both its dependencies and its dependents instantly.</span>
 <span class="doccomment">//! </span>
 <span class="doccomment">//! More importantly, it allows `A` to be dropped before `B`, </span>
@@ -1069,7 +1081,7 @@
 <span class="doccomment">//! This correctly avoids dependency violations by ensuring that a section `B`</span>
 <span class="doccomment">//! is never dropped while any other section `A` relies on it.</span>
 <span class="doccomment">//! </span>
-<span class="doccomment">//! When swapping crates, the `WeakDependent`s are actually more useful. </span>
+<span class="doccomment">//! When swapping crates, the [`WeakDependent`]s are actually more useful. </span>
 <span class="doccomment">//! For example, if we want to swap the crate that contains section `B1` with a new one `B2`, </span>
 <span class="doccomment">//! then we can immediately find all of the section `A`s that depend on `B1` </span>
 <span class="doccomment">//! by iterating over `B1.sections_dependent_on_me`. </span>
@@ -1085,48 +1097,55 @@
 <span class="doccomment">//! }</span>
 <span class="doccomment">//! ```</span>
 <span class="doccomment">//! </span>
+<span class="doccomment">//! [`A.sections_i_depend_on`]: LoadedSectionInner::sections_i_depend_on</span>
+<span class="doccomment">//! [`B.sections_dependent_on_me`]: LoadedSectionInner::sections_dependent_on_me</span>
+<span class="doccomment">//! </span>
 
 <span class="attribute">#![<span class="ident">no_std</span>]</span>
 
-<span class="attribute">#[<span class="ident">macro_use</span>]</span> <span class="kw">extern</span> <span class="kw">crate</span> <span class="ident">alloc</span>;
-<span class="attribute">#[<span class="ident">macro_use</span>]</span> <span class="kw">extern</span> <span class="kw">crate</span> <span class="ident">log</span>;
-<span class="kw">extern</span> <span class="kw">crate</span> <span class="ident">spin</span>; 
-<span class="kw">extern</span> <span class="kw">crate</span> <span class="ident">memory</span>;
-<span class="kw">extern</span> <span class="kw">crate</span> <span class="ident">cow_arc</span>;
-<span class="kw">extern</span> <span class="kw">crate</span> <span class="ident">hashbrown</span>;
-<span class="kw">extern</span> <span class="kw">crate</span> <span class="ident">fs_node</span>;
-<span class="kw">extern</span> <span class="kw">crate</span> <span class="ident">xmas_elf</span>;
-<span class="kw">extern</span> <span class="kw">crate</span> <span class="ident">goblin</span>;
+<span class="kw">extern</span> <span class="kw">crate</span> <span class="ident">alloc</span>;
 
 <span class="kw">use</span> <span class="ident">core::convert::TryFrom</span>;
 <span class="kw">use</span> <span class="ident">core::fmt</span>;
 <span class="kw">use</span> <span class="ident">core::ops::Range</span>;
+<span class="kw">use</span> <span class="ident">lazy_static::lazy_static</span>;
+<span class="kw">use</span> <span class="ident">log</span>::{<span class="ident">error</span>, <span class="ident">debug</span>, <span class="ident">trace</span>};
 <span class="kw">use</span> <span class="ident">spin</span>::{<span class="ident">Mutex</span>, <span class="ident">RwLock</span>};
 <span class="kw">use</span> <span class="ident">alloc</span>::{
     <span class="ident">collections::BTreeSet</span>,
+    <span class="ident">format</span>,
     <span class="ident">string::String</span>,
     <span class="ident">sync</span>::{<span class="ident">Arc</span>, <span class="ident">Weak</span>},
     <span class="ident">vec::Vec</span>,
 };
 <span class="kw">use</span> <span class="ident">memory</span>::{<span class="ident">MappedPages</span>, <span class="ident">VirtualAddress</span>, <span class="ident">EntryFlags</span>};
-<span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">internal_deps</span>)]</span> <span class="kw">use</span> <span class="ident">memory::PageTable</span>;
+<span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">internal_deps</span>)]</span>
+<span class="kw">use</span> <span class="ident">memory::PageTable</span>;
 <span class="kw">use</span> <span class="ident">cow_arc</span>::{<span class="ident">CowArc</span>, <span class="ident">CowWeak</span>};
 <span class="kw">use</span> <span class="ident">fs_node</span>::{<span class="ident">FileRef</span>, <span class="ident">WeakFileRef</span>};
 <span class="kw">use</span> <span class="ident">hashbrown::HashMap</span>;
 <span class="kw">use</span> <span class="ident">goblin::elf::reloc</span>::<span class="kw-2">*</span>;
+<span class="kw">pub</span> <span class="kw">use</span> <span class="ident">str_ref::StrRef</span>;
 
 
-<span class="doccomment">/// A Strong reference to a `LoadedCrate`.</span>
+<span class="doccomment">/// A Strong reference to a [`LoadedCrate`].</span>
 <span class="kw">pub</span> <span class="kw">type</span> <span class="ident">StrongCrateRef</span>  <span class="op">=</span> <span class="ident">CowArc</span><span class="op">&lt;</span><span class="ident">LoadedCrate</span><span class="op">&gt;</span>;
-<span class="doccomment">/// A Weak reference to a `LoadedCrate`.</span>
+<span class="doccomment">/// A Weak reference to a [`LoadedCrate`].</span>
 <span class="kw">pub</span> <span class="kw">type</span> <span class="ident">WeakCrateRef</span> <span class="op">=</span> <span class="ident">CowWeak</span><span class="op">&lt;</span><span class="ident">LoadedCrate</span><span class="op">&gt;</span>;
-<span class="doccomment">/// A Strong reference (`Arc`) to a `LoadedSection`.</span>
+<span class="doccomment">/// A Strong reference ([`Arc`]) to a [`LoadedSection`].</span>
 <span class="kw">pub</span> <span class="kw">type</span> <span class="ident">StrongSectionRef</span>  <span class="op">=</span> <span class="ident">Arc</span><span class="op">&lt;</span><span class="ident">LoadedSection</span><span class="op">&gt;</span>;
-<span class="doccomment">/// A Weak reference (`Weak`) to a `LoadedSection`.</span>
+<span class="doccomment">/// A Weak reference ([`Weak`]) to a [`LoadedSection`].</span>
 <span class="kw">pub</span> <span class="kw">type</span> <span class="ident">WeakSectionRef</span> <span class="op">=</span> <span class="ident">Weak</span><span class="op">&lt;</span><span class="ident">LoadedSection</span><span class="op">&gt;</span>;
 <span class="doccomment">/// A Section Header iNDeX (SHNDX), as specified by the ELF format. </span>
 <span class="doccomment">/// Even though this is typically encoded as a `u16`, its decoded form can exceed the max size of `u16`.</span>
 <span class="kw">pub</span> <span class="kw">type</span> <span class="ident">Shndx</span> <span class="op">=</span> <span class="ident">usize</span>;
+
+<span class="macro">lazy_static!</span> {
+    <span class="doccomment">/// &quot;.eh_frame&quot; as a single, system-wide allocated `StrRef`.</span>
+    <span class="kw">pub</span> <span class="kw">static</span> <span class="kw-2">ref</span> <span class="ident">EH_FRAME_STR_REF</span>: <span class="ident">StrRef</span> <span class="op">=</span> <span class="ident">StrRef::from</span>(<span class="string">&quot;.eh_frame&quot;</span>);
+    <span class="doccomment">/// &quot;.gcc_except_table&quot; as a single, system-wide allocated `StrRef`.</span>
+    <span class="kw">pub</span> <span class="kw">static</span> <span class="kw-2">ref</span> <span class="ident">GCC_EXCEPT_TABLE_STR_REF</span>: <span class="ident">StrRef</span> <span class="op">=</span> <span class="ident">StrRef::from</span>(<span class="string">&quot;.gcc_except_table&quot;</span>);
+}
 
 <span class="doccomment">/// `.text` sections are read-only and executable.</span>
 <span class="kw">pub</span> <span class="kw">const</span> <span class="ident">TEXT_SECTION_FLAGS</span>:     <span class="ident">EntryFlags</span> <span class="op">=</span> <span class="ident">EntryFlags::PRESENT</span>;
@@ -1227,7 +1246,7 @@
 <span class="doccomment">/// loaded and linked into at least one `CrateNamespace`.</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">LoadedCrate</span> {
     <span class="doccomment">/// The name of this crate.</span>
-    <span class="kw">pub</span> <span class="ident">crate_name</span>: <span class="ident">String</span>,
+    <span class="kw">pub</span> <span class="ident">crate_name</span>: <span class="ident">StrRef</span>,
     <span class="doccomment">/// The object file that this crate was loaded from.</span>
     <span class="kw">pub</span> <span class="ident">object_file</span>: <span class="ident">FileRef</span>,
     <span class="doccomment">/// The file that contains debug symbols for this crate. </span>
@@ -1292,7 +1311,7 @@
     <span class="doccomment">/// </span>
     <span class="doccomment">/// When a crate is first loaded, this will be empty by default, </span>
     <span class="doccomment">/// because this crate will only have populated its `global_sections` set during loading. </span>
-    <span class="kw">pub</span> <span class="ident">reexported_symbols</span>: <span class="ident">BTreeSet</span><span class="op">&lt;</span><span class="ident">String</span><span class="op">&gt;</span>,
+    <span class="kw">pub</span> <span class="ident">reexported_symbols</span>: <span class="ident">BTreeSet</span><span class="op">&lt;</span><span class="ident">StrRef</span><span class="op">&gt;</span>,
 }
 
 <span class="kw">impl</span> <span class="ident">fmt::Debug</span> <span class="kw">for</span> <span class="ident">LoadedCrate</span> {
@@ -1320,7 +1339,7 @@
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">get_function_section</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">func_name</span>: <span class="kw-2">&amp;</span><span class="ident">str</span>) -&gt; <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="kw-2">&amp;</span><span class="ident">StrongSectionRef</span><span class="op">&gt;</span> {
         <span class="self">self</span>.<span class="ident">find_section</span>(<span class="op">|</span><span class="ident">sec</span><span class="op">|</span> 
             <span class="ident">sec</span>.<span class="ident">get_type</span>() <span class="op">==</span> <span class="ident">SectionType::Text</span> <span class="op">&amp;&amp;</span>
-            <span class="ident">sec</span>.<span class="ident">name</span> <span class="op">==</span> <span class="ident">func_name</span>
+            <span class="ident">sec</span>.<span class="ident">name</span>.<span class="ident">as_str</span>() <span class="op">==</span> <span class="ident">func_name</span>
         )
     }
 
@@ -1347,8 +1366,7 @@
         <span class="kw">where</span> <span class="ident">F</span>: <span class="ident">Fn</span>(<span class="kw-2">&amp;</span><span class="ident">LoadedSection</span>) -&gt; <span class="ident">bool</span>
     {
         <span class="self">self</span>.<span class="ident">sections</span>.<span class="ident">values</span>()
-            .<span class="ident">filter</span>(<span class="op">|</span><span class="kw-2">&amp;</span><span class="ident">sec</span><span class="op">|</span> <span class="ident">predicate</span>(<span class="ident">sec</span>))
-            .<span class="ident">next</span>()
+            .<span class="ident">find</span>(<span class="op">|</span><span class="kw-2">&amp;</span><span class="ident">sec</span><span class="op">|</span> <span class="ident">predicate</span>(<span class="ident">sec</span>))
     }
 
     <span class="doccomment">/// Returns the substring of this crate&#39;s name that excludes the trailing hash. </span>
@@ -1467,7 +1485,7 @@
             <span class="ident">rodata_pages</span>:            <span class="ident">new_rodata_pages_range</span>,
             <span class="ident">data_pages</span>:              <span class="ident">new_data_pages_range</span>,
             <span class="ident">global_sections</span>:         <span class="self">self</span>.<span class="ident">global_sections</span>.<span class="ident">clone</span>(),
-            <span class="ident">tls_sections</span>:            <span class="self">self</span>.<span class="ident">tss_sections</span>.<span class="ident">clone</span>(),
+            <span class="ident">tls_sections</span>:            <span class="self">self</span>.<span class="ident">tls_sections</span>.<span class="ident">clone</span>(),
             <span class="ident">data_sections</span>:           <span class="self">self</span>.<span class="ident">data_sections</span>.<span class="ident">clone</span>(),
             <span class="ident">reexported_symbols</span>:      <span class="self">self</span>.<span class="ident">reexported_symbols</span>.<span class="ident">clone</span>(),
         });
@@ -1490,14 +1508,16 @@
                     <span class="ident">new_text_pages_ref</span>.<span class="ident">clone</span>().<span class="ident">ok_or_else</span>(<span class="op">|</span><span class="op">|</span> <span class="string">&quot;BUG: missing text pages in newly-copied crate&quot;</span>)<span class="question-mark">?</span>,
                     <span class="ident">new_text_pages_locked</span>.<span class="ident">as_ref</span>().<span class="ident">and_then</span>(<span class="op">|</span><span class="ident">tp</span><span class="op">|</span> <span class="ident">tp</span>.<span class="ident">address_at_offset</span>(<span class="ident">new_sec_mapped_pages_offset</span>)),
                 ),
-                <span class="ident">SectionType::Rodata</span> <span class="op">|</span>
-                <span class="ident">SectionType::GccExceptTable</span> <span class="op">|</span> 
-                <span class="ident">SectionType::EhFrame</span> =&gt; (
+                <span class="ident">SectionType::Rodata</span>
+                <span class="op">|</span> <span class="ident">SectionType::GccExceptTable</span>
+                <span class="op">|</span> <span class="ident">SectionType::TlsBss</span>
+                <span class="op">|</span> <span class="ident">SectionType::TlsData</span> 
+                <span class="op">|</span> <span class="ident">SectionType::EhFrame</span> =&gt; (
                     <span class="ident">new_rodata_pages_ref</span>.<span class="ident">clone</span>().<span class="ident">ok_or_else</span>(<span class="op">|</span><span class="op">|</span> <span class="string">&quot;BUG: missing rodata pages in newly-copied crate&quot;</span>)<span class="question-mark">?</span>,
                     <span class="ident">new_rodata_pages_locked</span>.<span class="ident">as_ref</span>().<span class="ident">and_then</span>(<span class="op">|</span><span class="ident">rp</span><span class="op">|</span> <span class="ident">rp</span>.<span class="ident">address_at_offset</span>(<span class="ident">new_sec_mapped_pages_offset</span>)),
                 ),
-                <span class="ident">SectionType::Data</span> <span class="op">|</span>
-                <span class="ident">SectionType::Bss</span> =&gt; (
+                <span class="ident">SectionType::Data</span>
+                <span class="op">|</span> <span class="ident">SectionType::Bss</span> =&gt; (
                     <span class="ident">new_data_pages_ref</span>.<span class="ident">clone</span>().<span class="ident">ok_or_else</span>(<span class="op">|</span><span class="op">|</span> <span class="string">&quot;BUG: missing data pages in newly-copied crate&quot;</span>)<span class="question-mark">?</span>,
                     <span class="ident">new_data_pages_locked</span>.<span class="ident">as_ref</span>().<span class="ident">and_then</span>(<span class="op">|</span><span class="ident">dp</span><span class="op">|</span> <span class="ident">dp</span>.<span class="ident">address_at_offset</span>(<span class="ident">new_sec_mapped_pages_offset</span>)),
                 ),
@@ -1528,12 +1548,20 @@
         <span class="kw">for</span> <span class="ident">new_sec</span> <span class="kw">in</span> <span class="ident">new_sections</span>.<span class="ident">values</span>() {
             <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">new_sec_inner</span> <span class="op">=</span> <span class="ident">new_sec</span>.<span class="ident">inner</span>.<span class="ident">write</span>();
             <span class="kw">let</span> <span class="ident">new_sec_mapped_pages</span> <span class="op">=</span> <span class="kw">match</span> <span class="ident">new_sec</span>.<span class="ident">typ</span> {
-                <span class="ident">SectionType::Text</span>    =&gt; <span class="ident">new_text_pages_locked</span>.<span class="ident">as_mut</span>().<span class="ident">ok_or_else</span>(<span class="op">|</span><span class="op">|</span> <span class="string">&quot;BUG: missing text pages in newly-copied crate&quot;</span>)<span class="question-mark">?</span>,
-                <span class="ident">SectionType::Rodata</span> <span class="op">|</span>
-                <span class="ident">SectionType::GccExceptTable</span> <span class="op">|</span> 
-                <span class="ident">SectionType::EhFrame</span> =&gt; <span class="ident">new_rodata_pages_locked</span>.<span class="ident">as_mut</span>().<span class="ident">ok_or_else</span>(<span class="op">|</span><span class="op">|</span> <span class="string">&quot;BUG: missing rodata pages in newly-copied crate&quot;</span>)<span class="question-mark">?</span>,
-                <span class="ident">SectionType::Data</span> <span class="op">|</span>
-                <span class="ident">SectionType::Bss</span>     =&gt; <span class="ident">new_data_pages_locked</span>.<span class="ident">as_mut</span>().<span class="ident">ok_or_else</span>(<span class="op">|</span><span class="op">|</span> <span class="string">&quot;BUG: missing data pages in newly-copied crate&quot;</span>)<span class="question-mark">?</span>,
+                <span class="ident">SectionType::Text</span> =&gt; <span class="ident">new_text_pages_locked</span>
+                    .<span class="ident">as_mut</span>()
+                    .<span class="ident">ok_or_else</span>(<span class="op">|</span><span class="op">|</span> <span class="string">&quot;BUG: missing text pages in newly-copied crate&quot;</span>)<span class="question-mark">?</span>,
+                <span class="ident">SectionType::Rodata</span>
+                <span class="op">|</span> <span class="ident">SectionType::TlsBss</span>
+                <span class="op">|</span> <span class="ident">SectionType::TlsData</span>
+                <span class="op">|</span> <span class="ident">SectionType::GccExceptTable</span>
+                <span class="op">|</span> <span class="ident">SectionType::EhFrame</span> =&gt; <span class="ident">new_rodata_pages_locked</span>
+                    .<span class="ident">as_mut</span>()
+                    .<span class="ident">ok_or_else</span>(<span class="op">|</span><span class="op">|</span> <span class="string">&quot;BUG: missing rodata pages in newly-copied crate&quot;</span>)<span class="question-mark">?</span>,
+                <span class="ident">SectionType::Data</span>
+                <span class="op">|</span> <span class="ident">SectionType::Bss</span> =&gt; <span class="ident">new_data_pages_locked</span>
+                    .<span class="ident">as_mut</span>()
+                    .<span class="ident">ok_or_else</span>(<span class="op">|</span><span class="op">|</span> <span class="string">&quot;BUG: missing data pages in newly-copied crate&quot;</span>)<span class="question-mark">?</span>,
             };
             <span class="kw">let</span> <span class="ident">new_sec_mapped_pages_offset</span> <span class="op">=</span> <span class="ident">new_sec</span>.<span class="ident">mapped_pages_offset</span>;
 
@@ -1612,7 +1640,7 @@
 
 
 <span class="doccomment">/// The possible types of sections that can be loaded from a crate object file.</span>
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Copy</span>, <span class="ident">Clone</span>, <span class="ident">PartialEq</span>)]</span>
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Copy</span>, <span class="ident">Clone</span>, <span class="ident">PartialEq</span>, <span class="ident">serde::Serialize</span>, <span class="ident">serde::Deserialize</span>)]</span>
 <span class="kw">pub</span> <span class="kw">enum</span> <span class="ident">SectionType</span> {
     <span class="doccomment">/// A `text` section contains executable code, i.e., functions. </span>
     <span class="ident">Text</span>,
@@ -1683,7 +1711,7 @@
 <span class="doccomment">/// Represents a section that has been loaded and is part of a `LoadedCrate`.</span>
 <span class="doccomment">/// The containing `SectionType` enum determines which type of section it is.</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">LoadedSection</span> {
-    <span class="doccomment">/// The full String name of this section, a fully-qualified symbol, </span>
+    <span class="doccomment">/// The full string name of this section, a fully-qualified symbol, </span>
     <span class="doccomment">/// with the format `&lt;crate&gt;::[&lt;module&gt;::][&lt;struct&gt;::]&lt;fn_name&gt;::&lt;hash&gt;`.</span>
     <span class="doccomment">/// The unique hash is generated for each section by the Rust compiler,</span>
     <span class="doccomment">/// which can be used as a version identifier. </span>
@@ -1692,7 +1720,7 @@
     <span class="doccomment">/// # Examples</span>
     <span class="doccomment">/// * `test_lib::MyStruct::new::h843a613894da0c24`</span>
     <span class="doccomment">/// * `my_crate::my_function::hbce878984534ceda`   </span>
-    <span class="kw">pub</span> <span class="ident">name</span>: <span class="ident">String</span>,
+    <span class="kw">pub</span> <span class="ident">name</span>: <span class="ident">StrRef</span>,
     <span class="doccomment">/// The type of this section, e.g., `.text`, `.rodata`, `.data`, `.bss`, etc.</span>
     <span class="kw">pub</span> <span class="ident">typ</span>: <span class="ident">SectionType</span>,
     <span class="doccomment">/// Whether or not this section&#39;s symbol was exported globally (is public)</span>
@@ -1720,7 +1748,7 @@
     <span class="doccomment">/// Create a new `LoadedSection`, with an empty `dependencies` list.</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">new</span>(
         <span class="ident">typ</span>: <span class="ident">SectionType</span>, 
-        <span class="ident">name</span>: <span class="ident">String</span>, 
+        <span class="ident">name</span>: <span class="ident">StrRef</span>, 
         <span class="ident">mapped_pages</span>: <span class="ident">Arc</span><span class="op">&lt;</span><span class="ident">Mutex</span><span class="op">&lt;</span><span class="ident">MappedPages</span><span class="op">&gt;</span><span class="op">&gt;</span>,
         <span class="ident">mapped_pages_offset</span>: <span class="ident">usize</span>,
         <span class="ident">virt_addr</span>: <span class="ident">VirtualAddress</span>,
@@ -1747,7 +1775,7 @@
     <span class="doccomment">/// Same as [new()`](#method.new), but uses the given `dependencies` instead of the default empty list.</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">with_dependencies</span>(
         <span class="ident">typ</span>: <span class="ident">SectionType</span>, 
-        <span class="ident">name</span>: <span class="ident">String</span>, 
+        <span class="ident">name</span>: <span class="ident">StrRef</span>, 
         <span class="ident">mapped_pages</span>: <span class="ident">Arc</span><span class="op">&lt;</span><span class="ident">Mutex</span><span class="op">&lt;</span><span class="ident">MappedPages</span><span class="op">&gt;</span><span class="op">&gt;</span>,
         <span class="ident">mapped_pages_offset</span>: <span class="ident">usize</span>,
         <span class="ident">virt_addr</span>: <span class="ident">VirtualAddress</span>,
@@ -1795,7 +1823,7 @@
     <span class="doccomment">/// </span>
     <span class="doccomment">/// See the identical associated function [`section_name_without_hash()`](#fn.section_name_without_hash.html) for more. </span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">name_without_hash</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="ident">str</span> {
-        <span class="ident"><span class="self">Self</span>::section_name_without_hash</span>(<span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">name</span>)
+        <span class="ident"><span class="self">Self</span>::section_name_without_hash</span>(<span class="self">self</span>.<span class="ident">name</span>.<span class="ident">as_str</span>())
     }
 
 
@@ -2086,6 +2114,7 @@
     }
 
     <span class="prelude-val">Ok</span>(())
-}</code></pre></div>
+}
+</code></pre></div>
 </section><section id="search" class="content hidden"></section></div></main><div id="rustdoc-vars" data-root-path="../../" data-current-crate="crate_metadata" data-themes="ayu,dark,light" data-resource-suffix="" data-rustdoc-version="1.61.0-nightly (c84f39e6c 2022-03-20)" ></div>
 </body></html>
