@@ -83,7 +83,7 @@ exclude = [
 	"applications/test_channel",
 	"applications/test_downtime",
 	"applications/test_filerw",
-	"applications/test_ixgbe",
+	#"applications/test_ixgbe",
 	"applications/test_libc",
 	"applications/test_mlx5",
 	"applications/test_mutex_sleep",

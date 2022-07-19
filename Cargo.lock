@@ -3318,6 +3318,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "test_ixgbe_batch"
+version = "0.1.0"
+dependencies = [
+ "getopts",
+ "ixgbe",
+ "log",
+ "network_interface_card",
+ "spawn",
+ "terminal_print",
+]
+
+[[package]]
 name = "test_libc"
 version = "0.1.0"
 dependencies = [

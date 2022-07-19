@@ -1225,6 +1225,8 @@ impl IxgbeNic {
         Ok(queues)
     }
 
+    /// Retrieves `num_packets` packets from queue `qid` and stores them in `buffers`.
+    /// Returns the total number of received packets.
     pub fn rx_batch(&mut self, qid: usize, buffers: &mut Vec<ReceiveBuffer>, num_packets: usize) -> Result<usize, &'static str> {
         if qid >= self.rx_queues.len() {
             return Err("Invalid queue id");
@@ -1232,12 +1234,14 @@ impl IxgbeNic {
 
         let queue = &mut self.rx_queues[qid];
         let mut rx_cur = queue.rx_cur as usize;
-        let orig_rx_cur = queue.rx_cur as usize;
+        let mut last_rx_cur = queue.rx_cur as usize;
 
         let mut rcvd_pkts = 0;
 
         for _ in 0..num_packets {
+            // error!("last_rx_cur = {}, rx_cur = {}", last_rx_cur, rx_cur);
             if !queue.rx_descs[rx_cur].descriptor_done() {
+                // error!("DD = {}", queue.rx_descs[rx_cur].descriptor_done());
                 break;
             }
 
@@ -1263,6 +1267,7 @@ impl IxgbeNic {
 
             // actually tell the NIC about the new receive buffer, and that it's ready for use now
             queue.rx_descs[rx_cur].set_packet_address(new_receive_buf.phys_addr);
+            queue.rx_descs[rx_cur].reset_status();
 
             // Swap in the new receive buffer at the index corresponding to this current rx_desc's receive buffer,
             // getting back the receive buffer that is part of the received ethernet frame
@@ -1272,18 +1277,21 @@ impl IxgbeNic {
 
             buffers.push(current_rx_buf);
             rcvd_pkts += 1;
+            last_rx_cur = rx_cur;
             rx_cur = (rx_cur + 1) % queue.num_rx_descs as usize;
         }
 
-        if orig_rx_cur != rx_cur {
+        if last_rx_cur != rx_cur {
             queue.rx_cur = rx_cur as u16;
-            queue.regs.set_rdt(rx_cur as u32); 
+            queue.regs.set_rdt(last_rx_cur as u32); 
         }
 
         Ok(rcvd_pkts)
 
     }
 
+    /// Sends all packets in `buffers` on queue `qid` if there are descriptors available.
+    /// (number of packets sent, used transmit buffers that can now be dropped or reused) are returned.
     pub fn tx_batch(&mut self, qid: usize, buffers: &mut Vec<TransmitBuffer>) -> Result<(usize, Vec<TransmitBuffer>), &'static str> {
         if qid >= self.tx_queues.len() {
             return Err("Invalid queue id");
@@ -1295,6 +1303,7 @@ impl IxgbeNic {
 
         let used_buffers = Self::tx_clean(queue);
         let tx_clean = queue.tx_clean;
+        // debug!("tx_cur = {}, tx_clean ={}", tx_cur, tx_clean);
 
         while let Some(packet) = buffers.pop() {
             let tx_next = (tx_cur + 1) % queue.num_tx_descs;
