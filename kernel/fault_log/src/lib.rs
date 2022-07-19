@@ -166,14 +166,14 @@ fn update_and_insert_fault_entry_internal(
 
     // If task is from an application add application crate name. `None` if not 
     fe.running_app_crate = {
-        curr_task.app_crate.as_ref().map(|x| x.lock_as_ref().crate_name.clone())
+        curr_task.app_crate.as_ref().map(|x| x.lock_as_ref().crate_name.to_string())
     };
 
     if let Some(instruction_pointer) = instruction_pointer {
         let instruction_pointer = VirtualAddress::new_canonical(instruction_pointer);
         fe.instruction_pointer = Some(instruction_pointer);
         fe.crate_error_occured = namespace.get_crate_containing_address(instruction_pointer.clone(), false)
-                                        .map(|x| x.lock_as_ref().crate_name.clone());
+                                        .map(|x| x.lock_as_ref().crate_name.to_string());
     };
 
     // Push the fault entry.
@@ -204,7 +204,7 @@ pub fn log_panic_entry(panic_info: &PanicInfo) {
     if let Some(location) = panic_info.location() {
         // debug!("panic occurred in file '{}' at line {}", location.file(), location.line());
         let panic_file = location.file();
-        let mut error_crate_iter = panic_file.split("/");
+        let mut error_crate_iter = panic_file.split('/');
         error_crate_iter.next();
         let error_crate_name_simple = error_crate_iter.next().unwrap_or_else(|| panic_file);
         debug!("panic file {}",error_crate_name_simple);
@@ -259,7 +259,7 @@ pub fn get_the_most_recent_match(error_crate : &str) -> Option<FaultEntry> {
     for fault_entry in FAULT_LIST.lock().iter() {
         if let Some(crate_error_occured) = &fault_entry.crate_error_occured {
             let error_crate_name = crate_error_occured.clone();
-            let error_crate_name_simple = error_crate_name.split("-").next().unwrap_or_else(|| &error_crate_name);
+            let error_crate_name_simple = error_crate_name.split('-').next().unwrap_or_else(|| &error_crate_name);
             if error_crate_name_simple == error_crate {
                 let item = fault_entry.clone();
                 fe = Some(item);

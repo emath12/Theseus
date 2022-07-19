@@ -128,11 +128,11 @@ static RESULTS_READY: [AtomicU64; WORDS_IN_BITMAP] = [AtomicU64::new(0), AtomicU
 
 lazy_static!{
     /// PMU version supported by the current hardware. The default is zero since the performance monitoring information would not be retrieved only if there was no PMU available.
-    static ref PMU_VERSION: u8 = CpuId::new().get_performance_monitoring_info().and_then(|pmi| Some(pmi.version_id())).unwrap_or(0);
+    static ref PMU_VERSION: u8 = CpuId::new().get_performance_monitoring_info().map(|pmi| pmi.version_id()).unwrap_or(0);
     /// The number of general purpose PMCs that can be used. The default is zero since the performance monitoring information would not be retrieved only if there was no PMU available.
-    static ref NUM_PMC: u8 = CpuId::new().get_performance_monitoring_info().and_then(|pmi| Some(pmi.number_of_counters())).unwrap_or(0);
+    static ref NUM_PMC: u8 = CpuId::new().get_performance_monitoring_info().map(|pmi| pmi.number_of_counters()).unwrap_or(0);
     /// The number of fixed function counters. The default is zero since the performance monitoring information would not be retrieved only if there was no PMU available.
-    static ref NUM_FIXED_FUNC_COUNTERS: u8 = CpuId::new().get_performance_monitoring_info().and_then(|pmi| Some(pmi.fixed_function_counters())).unwrap_or(0);
+    static ref NUM_FIXED_FUNC_COUNTERS: u8 = CpuId::new().get_performance_monitoring_info().map(|pmi| pmi.fixed_function_counters()).unwrap_or(0);
     /// Set to store the cores that the PMU has already been initialized on
     static ref CORES_INITIALIZED: MutexIrqSafe<BTreeSet<u8>> = MutexIrqSafe::new(BTreeSet::new());
     /// The sampling information for each core
@@ -690,7 +690,14 @@ pub fn start_samples(event_type: EventType, event_per_sample: u32, task_id: Opti
 
     sampled_events.sample_count = sample_count;
 
-    if event_per_sample > core::u32::MAX || event_per_sample <= core::u32::MIN {
+    if event_per_sample == 0 {
+        return Err("Number of events per sample invalid: must be nonzero");
+    }
+    // This check can never trigger since `event_per_sample` is a `u32`
+    // and is therefore by definition in the range `u32::MIN..=u32::MAX`.
+    // We'll check anyways, just in case `event_per_sample`'s type is changed.
+    #[allow(clippy::absurd_extreme_comparisons)]
+    if event_per_sample > core::u32::MAX || event_per_sample < core::u32::MIN {
         return Err("Number of events per sample invalid: must be within unsigned 32 bit");
     }
 
