@@ -159,6 +159,12 @@ pub struct TxQueue<S: TxQueueRegisters, T: TxDescriptor> {
     pub num_tx_descs: u16,
     /// Current transmit descriptor index
     pub tx_cur: u16,
+    /// first descriptor that has been used but not checked for transmit completion
+    pub tx_clean: u16,
+    /// The list of tx buffers, in which the index in the vector corresponds to the index in `tx_descs`.
+    /// For example, `tx_bufs_in_use[2]` is the transmit buffer that that is being sent using `tx_descs[2]`.
+    /// This field may not be used if we wait for completion of each transmission, and so don't have to store the buffers. 
+    pub tx_bufs_in_use: VecDeque<TransmitBuffer>,
     /// The cpu which this queue is mapped to. 
     /// This in itself doesn't guarantee anything but we use this value when setting the cpu id for interrupts and DCA.
     pub cpu_id : Option<u8>

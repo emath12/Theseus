@@ -92,6 +92,9 @@ pub trait TxDescriptor: FromBytes {
 
     /// Polls the Descriptor Done bit until the packet has been sent.
     fn wait_for_packet_tx(&self);
+
+    /// Returns true if the descriptor done bit is set for this descriptor
+    fn desc_done(&self) -> bool;
 }
 
 
@@ -140,6 +143,11 @@ impl TxDescriptor for LegacyTxDescriptor {
             // debug!("tx desc status: {}", self.status.read());
         } 
     }
+
+    fn desc_done(&self) -> bool {
+        (self.status.read() & TX_STATUS_DD) == 1
+    }
+
 }
 
 impl fmt::Debug for LegacyTxDescriptor {
@@ -381,6 +389,10 @@ impl TxDescriptor for AdvancedTxDescriptor {
         while (self.paylen_popts_cc_idx_sta.read() as u8 & TX_STATUS_DD) == 0 {
             // error!("tx desc status: {:#X}", self.paylen_popts_cc_idx_sta.read());
         } 
+    }
+
+    fn desc_done(&self) -> bool {
+        (self.paylen_popts_cc_idx_sta.read() as u8 & TX_STATUS_DD) == 1
     }
 }
 
