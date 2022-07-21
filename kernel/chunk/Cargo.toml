@@ -1,0 +1,13 @@
+[package]
+authors = ["Ramla Ijaz <ijazramla@gmail.com>"]
+name = "chunk"
+description = "Definition of the type Chunk, which represents a region of unallocated memory, and its associated functions"
+version = "0.1.0"
+
+[dependencies]
+
+[dependencies.log]
+version = "0.4.8"
+
+[lib]
+crate-type = ["rlib"]
