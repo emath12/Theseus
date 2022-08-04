@@ -567,6 +567,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "cpio_reader"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bd420c52d86c5b08c494e7e3d16bce23f08f3f6544cccce2d6cc986d3144dca1"
+dependencies = [
+ "bitflags",
+]
+
+[[package]]
 name = "cpp_demangle"
 version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -601,7 +610,6 @@ dependencies = [
  "fs_node",
  "goblin",
  "hashbrown",
- "lazy_static",
  "log",
  "memory",
  "qp-trie",
@@ -891,6 +899,7 @@ name = "environment"
 version = "0.1.0"
 dependencies = [
  "fs_node",
+ "hashbrown",
  "root",
 ]
 
@@ -1645,6 +1654,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "lz4_flex"
+version = "0.9.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "74141c8af4bb8136dafb5705826bdd9dce823021db897c1129191804140ddf84"
+
+[[package]]
 name = "mach"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1883,6 +1898,7 @@ dependencies = [
  "bootloader_modules",
  "const_format",
  "cow_arc",
+ "cpio_reader",
  "crate_metadata",
  "crate_name_utils",
  "cstr_core",
@@ -1891,6 +1907,7 @@ dependencies = [
  "kernel_config",
  "lazy_static",
  "log",
+ "lz4_flex",
  "memfs",
  "memory",
  "path",
@@ -1939,9 +1956,9 @@ version = "0.1.0"
 
 [[package]]
 name = "multiboot2"
-version = "0.10.1"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13e9fc890ff2ef2ded9084c964b950da1bc9e26d480e446ae721607b899db1fd"
+checksum = "e6170b6f12ea75d8d0f5621e3ed780b041a666c4a5b904c77261fe343d0e798d"
 dependencies = [
  "bitflags",
 ]
