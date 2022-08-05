@@ -1,0 +1,46 @@
+[package]
+name = "packet_forwarder"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+getopts = "0.2.21"
+irq_safety = { git = "https://github.com/theseus-os/irq_safety" }
+
+
+[dependencies.log]
+version = "0.4.8"
+
+[dependencies.terminal_print]
+path = "../../kernel/terminal_print"
+
+[dependencies.ixgbe]
+path = "../../kernel/ixgbe"
+
+[dependencies.spawn]
+path = "../../kernel/spawn"
+
+[dependencies.network_interface_card]
+path = "../../kernel/network_interface_card"
+
+[dependencies.nic_buffers]
+path = "../../kernel/nic_buffers"
+
+[dependencies.memory]
+path = "../../kernel/memory"
+
+[dependencies.memory_structs]
+path = "../../kernel/memory_structs"
+
+[dependencies.pci]
+path = "../../kernel/pci"
+
+[dependencies.hpet]
+path = "../../kernel/acpi/hpet"
+
+[dependencies.libtest]
+path = "../../kernel/libtest"
+
+
