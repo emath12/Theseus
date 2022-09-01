@@ -27,9 +27,9 @@
 
 #![no_std]
 #![feature(panic_info_message)]
+#![feature(const_btree_new)]
 
 #[macro_use] extern crate alloc;
-#[macro_use] extern crate lazy_static;
 #[macro_use] extern crate log;
 #[macro_use] extern crate static_assertions;
 extern crate irq_safety;
@@ -38,6 +38,7 @@ extern crate stack;
 extern crate tss;
 extern crate mod_mgmt;
 extern crate context_switch;
+extern crate preemption;
 extern crate environment;
 extern crate root;
 extern crate x86_64;
@@ -46,12 +47,14 @@ extern crate kernel_config;
 extern crate crossbeam_utils;
 
 
-use core::fmt;
-use core::hash::{Hash, Hasher};
-use core::sync::atomic::{Ordering, AtomicUsize};
-use core::any::Any;
-use core::panic::PanicInfo;
-use core::ops::Deref;
+use core::{
+    any::Any,
+    fmt,
+    hash::{Hash, Hasher},
+    ops::Deref,
+    panic::PanicInfo,
+    sync::atomic::{AtomicBool, AtomicUsize, Ordering},
+};
 use alloc::{
     boxed::Box,
     collections::BTreeMap,
@@ -59,7 +62,7 @@ use alloc::{
     sync::Arc,
 };
 use crossbeam_utils::atomic::AtomicCell;
-use irq_safety::{MutexIrqSafe, interrupts_enabled};
+use irq_safety::{MutexIrqSafe, interrupts_enabled, hold_interrupts};
 use memory::MmiRef;
 use stack::Stack;
 use kernel_config::memory::KERNEL_STACK_SIZE_IN_PAGES;
@@ -67,6 +70,7 @@ use mod_mgmt::{AppCrateRef, CrateNamespace, TlsDataImage};
 use environment::Environment;
 use spin::Mutex;
 use x86_64::registers::model_specific::{GsBase, FsBase};
+use preemption::PreemptionGuard;
 
 
 /// The function signature of the callback that will be invoked
@@ -115,10 +119,8 @@ impl PanicInfoOwned {
 }
 
 
-lazy_static! {
-    /// The list of all Tasks in the system.
-    pub static ref TASKLIST: MutexIrqSafe<BTreeMap<usize, TaskRef>> = MutexIrqSafe::new(BTreeMap::new());
-}
+/// The list of all Tasks in the system.
+pub static TASKLIST: MutexIrqSafe<BTreeMap<usize, TaskRef>> = MutexIrqSafe::new(BTreeMap::new());
 
 
 /// returns a shared reference to the `Task` specified by the given `task_id`
@@ -289,12 +291,22 @@ pub struct TaskInner {
     /// The `TaskLocalData` refers back to this `Task` struct, thus it must be initialized later
     /// after the task has been fully created, which currently occurs in `TaskRef::new()`.
     task_local_data: Option<Box<TaskLocalData>>,
-    /// Data that should be dropped after a task switch; for example, the previous Task's [`TaskLocalData`].
-    drop_after_task_switch: Option<Box<dyn Any + Send>>,
+    /// The preemption guard that was used for safely task switching to this task.
+    ///
+    /// The `PreemptionGuard` is stored here right before a context switch begins
+    /// and then retrieved from here right after the context switch ends.
+    ///
+    /// TODO: this (and perhaps `task_local_data`) should be kept in per-CPU variables
+    ///       rather than within the `TaskInner` structure, because they aren't really related
+    ///       to a specific task, but rather to a specific CPU's preemption status.
+    preemption_guard: Option<PreemptionGuard>,
+    /// Data that should be dropped after switching away from a task that has exited.
+    /// Currently, this only contains the previous Task's [`TaskLocalData`].
+    drop_after_task_switch: Option<Box<TaskLocalData>>,
     /// The kernel stack, which all `Task`s must have in order to execute.
     pub kstack: Stack,
     /// Whether or not this task is pinned to a certain core.
-    /// The idle tasks (like idle_task) are always pinned to their respective cores.
+    /// The idle tasks are always pinned to their respective cores.
     pub pinned_core: Option<u8>,
     /// The function that will be called when this `Task` panics or fails due to a machine exception.
     /// It will be invoked before the task is cleaned up via stack unwinding.
@@ -338,6 +350,15 @@ pub struct Task {
     ///
     /// This is not public because it permits interior mutability.
     runstate: AtomicCell<RunState>,
+    /// Whether this Task is joinable.
+    /// * If `true`, another task holds the [`JoinableTaskRef`] object that was created
+    ///   by [`TaskRef::new()`], which indicates that that other task is able to
+    ///   wait for this task to exit and thus be able to obtain this task's exit value.
+    /// * If `false`, the [`JoinableTaskRef`] was dropped, and therefore no other task
+    ///   can join this task or obtain its exit value.
+    /// 
+    /// This is not public because it permits interior mutability.
+    joinable: AtomicBool,
     /// Memory management details: page tables, mappings, allocators, etc.
     /// This is shared among all other tasks in the same address space.
     pub mmi: MmiRef, 
@@ -454,6 +475,7 @@ impl Task {
                 exit_value: None,
                 saved_sp: 0,
                 task_local_data: None,
+                preemption_guard: None,
                 drop_after_task_switch: None,
                 kstack,
                 pinned_core: None,
@@ -463,8 +485,10 @@ impl Task {
             }),
             id: task_id,
             name: format!("task_{}", task_id),
-            runstate: AtomicCell::new(RunState::Initing),
             running_on_cpu: AtomicCell::new(None.into()),
+            runstate: AtomicCell::new(RunState::Initing),
+            // Tasks are not considered "joinable" until passed to `TaskRef::new()`
+            joinable: AtomicBool::new(false),
             mmi,
             is_an_idle_task: false,
             app_crate,
@@ -504,6 +528,22 @@ impl Task {
     /// Returns the APIC ID of the CPU this `Task` is currently running on.
     pub fn running_on_cpu(&self) -> Option<u8> {
         self.running_on_cpu.load().into()
+    }
+
+    /// Returns `true` if this task is joinable, `false` if not.
+    /// 
+    /// * If `true`, another task holds the [`JoinableTaskRef`] object that was created
+    ///   by [`TaskRef::new()`], which indicates that that other task is able to
+    ///   wait for this task to exit and thus be able to obtain this task's exit value.
+    /// * If `false`, the `TaskJoiner` object was dropped, and therefore no other task
+    ///   can join this task or obtain its exit value.
+    /// 
+    /// When a task is not joinable, it is considered to be an orphan
+    /// and will thus be automatically reaped and cleaned up once it exits
+    /// because no other task is waiting on it to exit.
+    #[doc(alias("orphan", "zombie"))]
+    pub fn is_joinable(&self) -> bool {
+        self.joinable.load(Ordering::Relaxed)
     }
 
     /// Returns the APIC ID of the CPU this `Task` is pinned on,
@@ -615,9 +655,9 @@ impl Task {
     ///
     /// # Locking / Deadlock
     /// Obtains the lock on this `Task`'s inner state in order to mutate it.    
+    #[doc(alias("reap"))]
     pub fn take_exit_value(&self) -> Option<ExitValue> {
-        if self.runstate() == RunState::Exited {
-            self.runstate.store(RunState::Reaped);
+        if self.runstate.compare_exchange(RunState::Exited, RunState::Reaped).is_ok() {
             TASKLIST.lock().remove(&self.id);
             self.inner.lock().exit_value.take()
         } else {
@@ -670,25 +710,59 @@ impl Task {
 
     /// Switches from the current task (`self`) to the given `next` task.
     /// 
-    /// # Locking / Deadlock
-    /// Obtains the locks on both this `Task`'s inner state and the given `next` `Task`'s inner state
-    /// in order to mutate them. 
-    pub fn task_switch(&self, next: &Task, apic_id: u8) {
-        // debug!("task_switch [0]: (AP {}) prev {:?}, next {:?}, interrupts?: {}", apic_id, self, next, irq_safety::interrupts_enabled());
+    /// ## Arguments
+    /// * `next`: the task to switch to.
+    /// * `apic_id`: the ID of the current CPU.
+    /// * `preemption_guard`: a guard that is used to ensure preemption is disabled
+    ///   for the duration of this task switch operation.
+    ///
+    /// ## Important Note about Control Flow
+    /// If this is the first time that `next` task has been switched to,
+    /// the control flow will *NOT* return from this function,
+    /// and will instead jump to a wrapper function that will directly invoke
+    /// the `next` task's entry point function.
+    ///
+    /// Control flow may eventually return to this point, but not until another
+    /// task switch occurs away from the given `next` task to a different task.
+    /// Note that regardless of control flow, the return values will always be valid and correct.
+    ///
+    /// ## Return
+    /// Returns a tuple of:
+    /// 1. a `bool` indicating whether an actual task switch occurred:
+    ///    * If `true`, the task switch did occur, and `next` is now the current task.
+    ///    * If `false`, the task switch did not occur, and `self` is still the current task.
+    /// 2. a [`PreemptionGuard`] that allows the caller to determine for how long
+    ///    preemption remains disabled, i.e., until the guard is dropped.
+    ///
+    /// ## Locking / Deadlock
+    /// Obtains brief locks on both this `Task`'s inner state and
+    /// the given `next` `Task`'s inner state in order to mutate them.
+    pub fn task_switch(
+        &self,
+        next: TaskRef,
+        apic_id: u8,
+        preemption_guard: PreemptionGuard,
+    ) -> (bool, PreemptionGuard) {
+        // No need to task switch if the next task is the same as the current task.
+        if self.id == next.id {
+            return (false, preemption_guard);
+        }
+
+        // trace!("task_switch [0]: (CPU {}) prev {:?}, next {:?}, interrupts?: {}", apic_id, self, next, irq_safety::interrupts_enabled());
 
         // These conditions are checked elsewhere, but can be re-enabled if we want to be extra strict.
         // if !next.is_runnable() {
         //     error!("BUG: Skipping task_switch due to scheduler bug: chosen 'next' Task was not Runnable! Current: {:?}, Next: {:?}", self, next);
-        //     return;
+        //     return (false, preemption_guard);
         // }
         // if next.is_running() {
         //     error!("BUG: Skipping task_switch due to scheduler bug: chosen 'next' Task was already running on AP {}!\nCurrent: {:?} Next: {:?}", apic_id, self, next);
-        //     return;
+        //     return (false, preemption_guard);
         // }
         // if let Some(pc) = next.pinned_core() {
         //     if pc != apic_id {
         //         error!("BUG: Skipping task_switch due to scheduler bug: chosen 'next' Task was pinned to AP {:?} but scheduled on AP {}!\n\tCurrent: {:?}, Next: {:?}", pc, apic_id, self, next);
-        //         return;
+        //         return (false, preemption_guard);
         //     }
         // }
 
@@ -706,43 +780,56 @@ impl Task {
         //         // debug!("task_switch [2]: new_tss_rsp = {:#X}", new_tss_rsp0);
         //     } else {
         //         error!("task_switch(): failed to set AP {} TSS RSP0, aborting task switch!", apic_id);
-        //         return;
+        //         return (false, preemption_guard);
         //     }
         // }
 
-        // update runstates
-        self.running_on_cpu.store(None.into()); // no longer running
-        next.running_on_cpu.store(Some(apic_id).into()); // now running on this core
-
-        // Switch page tables. 
-        // Since there is only a single address space (as userspace support is currently disabled),
-        // we do not need to do this at all.
-        if false {
-            let prev_mmi = &self.mmi;
-            let next_mmi = &next.mmi;
-            
-            if Arc::ptr_eq(prev_mmi, next_mmi) {
-                // do nothing because we're not changing address spaces
-                // debug!("task_switch [3]: prev_mmi is the same as next_mmi!");
-            } else {
-                // time to change to a different address space and switch the page tables!
-                let mut prev_mmi_locked = prev_mmi.lock();
-                let next_mmi_locked = next_mmi.lock();
-                // debug!("task_switch [3]: switching tables! From {} {:?} to {} {:?}", 
-                //         self.name, prev_mmi_locked.page_table, next.name, next_mmi_locked.page_table);
-
-                prev_mmi_locked.page_table.switch(&next_mmi_locked.page_table);
-            }
-        }
+        // // Switch page tables. 
+        // // Since there is only a single address space (as userspace support is currently disabled),
+        // // we do not need to do this at all.
+        // if false {
+        //     let prev_mmi = &self.mmi;
+        //     let next_mmi = &next.mmi;
+        //    
+        //     if Arc::ptr_eq(prev_mmi, next_mmi) {
+        //         // do nothing because we're not changing address spaces
+        //         // debug!("task_switch [3]: prev_mmi is the same as next_mmi!");
+        //     } else {
+        //         // time to change to a different address space and switch the page tables!
+        //         let mut prev_mmi_locked = prev_mmi.lock();
+        //         let next_mmi_locked = next_mmi.lock();
+        //         // debug!("task_switch [3]: switching tables! From {} {:?} to {} {:?}", 
+        //         //         self.name, prev_mmi_locked.page_table, next.name, next_mmi_locked.page_table);
+        //
+        //         prev_mmi_locked.page_table.switch(&next_mmi_locked.page_table);
+        //     }
+        // }
        
-        // update the current task to `next`
-        next.set_as_current_task();
+        // Set runstates and current task *atomically*, i.e., by disabling interrupts.
+        // This is necessary to ensure that any interrupt handlers that may run on this CPU
+        // during the schedule/task_switch routines cannot observe inconsistencies
+        // in task runstates, e.g., when an interrupt handler accesses the current task context.
+        {
+            let _held_interrupts = hold_interrupts();
+            self.running_on_cpu.store(None.into()); // no longer running
+            next.running_on_cpu.store(Some(apic_id).into()); // now running on this core
+            next.set_as_current_task();
+            drop(_held_interrupts);
+        }
+
+        // Move the preemption guard into the next task such that we can use retrieve it
+        // after the below context switch operation has completed.
+        //
+        // TODO: this should be moved into per-CPU storage areas rather than the task struct.
+        {
+            next.inner.lock().preemption_guard = Some(preemption_guard);
+        }
 
         // If the current task is exited, then we need to remove the cyclical TaskRef reference in its TaskLocalData.
         // We store the removed TaskLocalData in the next Task struct so that we can access it after the context switch.
         if self.has_exited() {
             // trace!("task_switch(): preparing to drop TaskLocalData for running task {}", self);
-            next.inner.lock().drop_after_task_switch = self.inner.lock().task_local_data.take().map(|tld_box| tld_box as Box<dyn Any + Send>);
+            next.inner.lock().drop_after_task_switch = self.inner.lock().task_local_data.take();
         }
 
         let prev_task_saved_sp: *mut usize = {
@@ -755,10 +842,13 @@ impl Task {
         };
         // debug!("task_switch [4]: prev sp: {:#X}, next sp: {:#X}", prev_task_saved_sp as usize, next_task_saved_sp);
 
-        /// A private macro that actually calls the given context switch routine.
+        /// A macro that drops the `next` TaskRef and then calls the given context switch routine.
         macro_rules! call_context_switch {
-            ($func:expr) => ( unsafe {
-                $func(prev_task_saved_sp, next_task_saved_sp);
+            ($func:expr) => ({
+                drop(next);
+                unsafe {
+                    $func(prev_task_saved_sp, next_task_saved_sp);
+                }
             });
         }
 
@@ -820,18 +910,56 @@ impl Task {
                 }
             }
         }
-        
-        // Here, `self` (curr) is now `next` because the stacks have been switched, 
-        // and `next` has become some other random task based on a previous task switch operation.
-        // Do not make any assumptions about what `next` is now, since it's unknown. 
+        ///////////////////////////////////////////////////////////////////////////////////////////
+        // *** Important Notes about Behavior after a Context Switch ***
+        //
+        // Here, after the actual context switch operation above,
+        // `self` (curr) is now `next` because the stacks have been switched, 
+        // and `next` has become another random task based on a previous task switch.
+        // 
+        // We cannot make any assumptions about what `next` is now, since it's unknown.
+        // Hence why we dropped the local `TaskRef` for `next` right before the context switch.
+        //
+        // If this is **NOT** the first time the newly-current task (`self`) has run,
+        // then it will resume execution below as normal because this is where it left off
+        // when the context switch operation occurred.
+        //
+        // However, if this **is** the first time that the newly-current task (`self`) 
+        // has been switched to and is running, the control flow will **NOT** proceed here.
+        // Instead, it will have directly jumped to its entry point, which is `task_wrapper()`.
+        //
+        // As such, anything we do below should also be done in `task_wrapper()`.
+        // Thus, we want to ensure that post-context switch actions below are kept minimal
+        // and are easy to replicate in `task_wrapper()`.
+        ///////////////////////////////////////////////////////////////////////////////////////////
 
-        // Now, as a final action, we drop any data that the original previous task 
-        // prepared for droppage before the context switch occurred.
+        let recovered_preemption_guard = self.post_context_switch_action();
+        (true, recovered_preemption_guard)
+    }
+
+
+    /// Perform any actions needed after a context switch.
+    /// 
+    /// Currently this only does two things:
+    /// 1. Drops any data that the original previous task (before the context switch)
+    ///    prepared for us to drop, as specified by `TaskInner::drop_after_task_switch`.
+    /// 2. Obtains the preemption guard such that preemption can be re-enabled
+    ///    when it is appropriate to do so.
+    #[doc(hidden)]
+    pub fn post_context_switch_action(&self) -> PreemptionGuard {
+        // Step 1: drop data from previously running task
         {
-            let mut inner = self.inner.lock();
-            let prev_task_data_to_drop = inner.drop_after_task_switch.take();
-            drop(inner); // release the lock as soon as possible
+            let prev_task_data_to_drop = self.inner.lock().drop_after_task_switch.take();
             drop(prev_task_data_to_drop);
+        }
+
+        // Step 2: retake ownership of preemption guard in order to re-enable preemption.
+        {
+            self.inner
+                .lock()
+                .preemption_guard
+                .take()
+                .expect("BUG: post_context_switch_action: no PreemptionGuard existed")
         }
     }
 }
@@ -839,7 +967,7 @@ impl Task {
 impl Drop for Task {
     fn drop(&mut self) {
         #[cfg(not(any(rq_eval, downtime_eval)))]
-        trace!("Task::drop(): {}", self);
+        trace!("[CPU {}] Task::drop(): {}", apic::get_my_apic_id(), self);
 
         // We must consume/drop the Task's kill handler BEFORE a Task can possibly be dropped.
         // This is because if an application task sets a kill handler that is a closure/function in the text section of the app crate itself,
@@ -859,39 +987,86 @@ impl fmt::Display for Task {
 }
 
 
+/// Represents a joinable [`TaskRef`], created by [`TaskRef::new()`].
+/// Auto-derefs into a [`TaskRef`].
+///
+/// This allows another task to:
+/// * [`join`] this task, i.e., wait for this task to finish executing,
+/// * to obtain its [exit value] after it has completed.
+/// 
+/// ## [`Drop`]-based Behavior
+/// The contained [`Task`] is joinable until this object is dropped.
+/// When dropped, this task will be marked as non-joinable and treated as an "orphan" task.
+/// This means that there is no way for another task to wait for it to complete
+/// or obtain its exit value.
+/// As such, this task will be auto-reaped after it exits (in order to avoid zombie tasks).
+/// 
+/// ## Not `Clone`-able
+/// Due to the above drop-based behavior, this type must not implement `Clone`
+/// because it assumes there is only ever one `JoinableTaskRef` per task.
+/// 
+/// However, this type auto-derefs into an inner [`TaskRef`], which *can* be cloned.
+/// 
+// /// Note: this type is considered an internal implementation detail.
+// /// Instead, use the `TaskJoiner` type from the `spawn` crate, 
+// /// which is intended to be the public-facing interface for joining a task.
+#[derive(Debug)]
+pub struct JoinableTaskRef {
+    task: TaskRef,
+}
+assert_not_impl_any!(JoinableTaskRef: Clone);
+impl Deref for JoinableTaskRef {
+    type Target = TaskRef;
+    fn deref(&self) -> &Self::Target {
+        &self.task
+    }
+}
+impl Drop for JoinableTaskRef {
+    /// Marks the inner [`Task`] as not joinable, meaning that it is an orphaned task
+    /// that will be auto-reaped after exiting.
+    fn drop(&mut self) {
+        self.task.joinable.store(false, Ordering::Relaxed);
+    }
+}
+
+
 /// A shareable, cloneable reference to a `Task` that exposes more methods
-/// for task management, and accesses the enclosed `Task` by locking it. 
+/// for task management and auto-derefs into an immutable `&Task` reference.
 /// 
 /// The `TaskRef` type is necessary because in many places across Theseus,
 /// a reference to a Task is used. 
 /// For example, task lists, task spawning, task management, scheduling, etc. 
 /// 
-/// Essentially a newtype wrapper around `Arc<Lock<Task>>` 
-/// where `Lock` is some mutex-like locking type.
-/// Currently, `Lock` is a `MutexIrqSafe`, so it **does not** allow
-/// multiple readers simultaneously; that will cause deadlock.
-/// 
-/// `TaskRef` implements the [`PartialEq`] and [`Eq`] traits; 
+/// ## Equality comparisons
+/// `TaskRef` implements the [`PartialEq`] and [`Eq`] traits to ensure that
 /// two `TaskRef`s are considered equal if they point to the same underlying `Task`.
-/// 
-/// `TaskRef` also auto-derefs into an immutable `Task` reference.
 #[derive(Debug, Clone)]
 pub struct TaskRef(Arc<Task>);
 
 impl TaskRef {
-    /// Creates a new `TaskRef` that wraps the given `Task`.
+    /// Creates a new `TaskRef`, a shareable wrapper around the given `Task`.
     /// 
-    /// Also initializes the given `Task`'s `TaskLocalData` struct,
-    /// which will be used to determine the current `Task` on each CPU core.
-    pub fn new(task: Task) -> TaskRef {
+    /// This function also initializes the given `Task`'s `TaskLocalData` struct,
+    /// which will be used to determine the current `Task` on each CPU.
+    /// 
+    /// It does *not* add this task to the system-wide task list or any runqueues,
+    /// nor does it schedule this task in.
+    /// 
+    /// ## Return
+    /// Returns a [`JoinableTaskRef`], which derefs into the newly-created `TaskRef`
+    /// and can be used to "join" this task (wait for it to exit) and obtain its exit value.
+    pub fn new(task: Task) -> JoinableTaskRef {
         let task_id = task.id;
         let taskref = TaskRef(Arc::new(task));
         let tld = TaskLocalData {
-            current_taskref: taskref.clone(),
-            current_task_id: task_id,
+            taskref: taskref.clone(),
+            task_id,
         };
         taskref.0.inner.lock().task_local_data = Some(Box::new(tld));
-        taskref
+
+        // Mark this task as joinable, now that it has been wrapped in the proper type.
+        taskref.joinable.store(true, Ordering::Relaxed);
+        JoinableTaskRef { task: taskref }
     }
 
     /// Blocks until this task has exited or has been killed.
@@ -930,7 +1105,7 @@ impl TaskRef {
     /// that the current task has cleanly exited.
     /// 
     /// # Locking / Deadlock
-    /// This method obtains a writable lock on the underlying Task in order to mutate its state.
+    /// This method obtains a writable lock on the underlying Task's inner state.
     /// 
     /// # Return
     /// * Returns `Ok` if the exit status was successfully set.     
@@ -955,7 +1130,7 @@ impl TaskRef {
     /// that the current task has crashed or failed and has been killed by the system.
     /// 
     /// # Locking / Deadlock
-    /// This method obtains a writable lock on the underlying Task in order to mutate its state.
+    /// This method obtains a writable lock on the underlying Task's inner state.
     /// 
     /// # Return
     /// * Returns `Ok` if the exit status was successfully set.     
@@ -984,7 +1159,7 @@ impl TaskRef {
     /// **
     /// 
     /// # Locking / Deadlock
-    /// This method obtains a writable lock on the underlying Task in order to mutate its state.
+    /// This method obtains a writable lock on the underlying Task's inner state.
     /// 
     /// # Return
     /// * Returns `Ok` if the exit status was successfully set to the given `KillReason`.     
@@ -1008,9 +1183,9 @@ impl TaskRef {
             return Err("BUG: task was already exited! (did not overwrite its existing exit value)");
         }
         {
-            self.0.runstate.store(RunState::Exited);
             let mut inner = self.0.inner.lock();
             inner.exit_value = Some(val);
+            self.0.runstate.store(RunState::Exited);
 
             // Corner case: if the task isn't currently running (as with killed tasks), 
             // we must clean it up now rather than in `task_switch()`, as it will never be scheduled in again.
@@ -1067,7 +1242,7 @@ pub fn bootstrap_task(
     apic_id: u8, 
     stack: Stack,
     kernel_mmi_ref: MmiRef,
-) -> Result<TaskRef, &'static str> {
+) -> Result<JoinableTaskRef, &'static str> {
     // Here, we cannot call `Task::new()` because tasking hasn't yet been set up for this core.
     // Instead, we generate all of the `Task` states manually, and create an initial task directly.
     let default_namespace = mod_mgmt::get_initial_kernel_namespace()
@@ -1092,8 +1267,8 @@ pub fn bootstrap_task(
     // set this as this core's current task, since it's obviously running
     task_ref.set_as_current_task();
     if get_my_current_task().is_none() {
-        error!("BUG: bootstrap_task(): failed to properly set the new idle task as the current task on AP {}", apic_id);
-        return Err("BUG: bootstrap_task(): failed to properly set the new idle task as the current task");
+        error!("BUG: bootstrap_task(): failed to properly set the new boostrapped task as the current task on AP {}", apic_id);
+        return Err("BUG: bootstrap_task(): failed to properly set the new bootstrapped task as the current task");
     }
 
     // insert the new task into the task list
@@ -1131,8 +1306,8 @@ fn bootstrap_task_cleanup_failure(current_task: TaskRef, kill_reason: KillReason
 // #[repr(C)]
 #[derive(Debug)]
 struct TaskLocalData {
-    current_taskref: TaskRef,
-    current_task_id: usize,
+    taskref: TaskRef,
+    task_id: usize,
 }
 
 /// Returns a reference to the current task's `TaskLocalData` 
@@ -1152,10 +1327,10 @@ fn get_task_local_data() -> Option<&'static TaskLocalData> {
 
 /// Returns a reference to the current task.
 pub fn get_my_current_task() -> Option<&'static TaskRef> {
-    get_task_local_data().map(|tld| &tld.current_taskref)
+    get_task_local_data().map(|tld| &tld.taskref)
 }
 
 /// Returns the current task's ID.
 pub fn get_my_current_task_id() -> Option<usize> {
-    get_task_local_data().map(|tld| tld.current_task_id)
+    get_task_local_data().map(|tld| tld.task_id)
 }

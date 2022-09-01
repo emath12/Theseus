@@ -2,7 +2,6 @@
 
 #[macro_use] extern crate alloc;
 #[macro_use] extern crate log;
-#[macro_use] extern crate lazy_static;
 
 use core::{cmp::max, fmt, mem::size_of, ops::{Deref, Range}};
 use alloc::{boxed::Box, collections::{BTreeMap, btree_map, BTreeSet}, string::{String, ToString}, sync::{Arc, Weak}, vec::Vec};
@@ -20,14 +19,12 @@ use path::Path;
 use memfs::MemFile;
 use hashbrown::HashMap;
 use rangemap::RangeMap;
-pub use crate_name_utils::{get_containing_crate_name, replace_containing_crate_name, crate_name_from_path};
+pub use crate_name_utils::*;
 pub use crate_metadata::*;
-
 
 pub mod parse_nano_core;
 pub mod replace_nano_core_crates;
-pub mod serde;
-
+mod serde;
 
 /// The name of the directory that contains all of the CrateNamespace files.
 pub const NAMESPACES_DIRECTORY_NAME: &'static str = "namespaces";
@@ -51,23 +48,21 @@ pub fn get_namespaces_directory() -> Option<DirRef> {
     root::get_root().lock().get_dir(NAMESPACES_DIRECTORY_NAME)
 }
 
-lazy_static! {
-    /// The thread-local storage (TLS) area "image" that is used as the initial data for each `Task`.
-    /// When spawning a new task, the new task will create its own local TLS area
-    /// with this `TlsInitializer` as the initial data values.
-    /// 
-    /// # Implementation Notes/Shortcomings
-    /// Currently, a single system-wide `TlsInitializer` instance is shared across all namespaces.
-    /// In the future, each namespace should hold its own TLS sections in its TlsInitializer area.
-    /// 
-    /// However, this is quite complex because each namespace must be aware of the TLS sections
-    /// in BOTH its underlying recursive namespace AND its (multiple) "parent" namespace(s)
-    /// that recursively depend on it, since no two TLS sections can conflict (have the same offset).
-    /// 
-    /// Thus, we stick with a singleton `TlsInitializer` instance, which makes sense 
-    /// because it behaves much like an allocator, in that it reserves space (index ranges) in the TLS area.
-    static ref TLS_INITIALIZER: Mutex<TlsInitializer> = Mutex::new(TlsInitializer::empty());
-}
+/// The thread-local storage (TLS) area "image" that is used as the initial data for each `Task`.
+/// When spawning a new task, the new task will create its own local TLS area
+/// with this `TlsInitializer` as the initial data values.
+/// 
+/// # Implementation Notes/Shortcomings
+/// Currently, a single system-wide `TlsInitializer` instance is shared across all namespaces.
+/// In the future, each namespace should hold its own TLS sections in its TlsInitializer area.
+/// 
+/// However, this is quite complex because each namespace must be aware of the TLS sections
+/// in BOTH its underlying recursive namespace AND its (multiple) "parent" namespace(s)
+/// that recursively depend on it, since no two TLS sections can conflict (have the same offset).
+/// 
+/// Thus, we stick with a singleton `TlsInitializer` instance, which makes sense 
+/// because it behaves much like an allocator, in that it reserves space (index ranges) in the TLS area.
+static TLS_INITIALIZER: Mutex<TlsInitializer> = Mutex::new(TlsInitializer::empty());
 
 
 /// Create a new application `CrateNamespace` that uses the default application directory 
@@ -1348,7 +1343,7 @@ impl CrateNamespace {
             // Create a new `LoadedSection` to represent this section.
             let new_section = LoadedSection::new(
                 typ,
-                typ.name_str_ref(),
+                section_name_str_ref(&typ),
                 Arc::clone(mapped_pages_ref),
                 mapped_pages_offset,
                 virt_addr,
@@ -1984,7 +1979,7 @@ impl CrateNamespace {
                         shndx, 
                         Arc::new(LoadedSection::new(
                             typ,
-                            typ.name_str_ref(),
+                            section_name_str_ref(&typ),
                             Arc::clone(rp_ref),
                             rodata_offset,
                             dest_vaddr,
@@ -2023,7 +2018,7 @@ impl CrateNamespace {
                         shndx, 
                         Arc::new(LoadedSection::new(
                             typ,
-                            typ.name_str_ref(),
+                            section_name_str_ref(&typ),
                             Arc::clone(rp_ref),
                             rodata_offset,
                             dest_vaddr,
@@ -2569,12 +2564,12 @@ impl CrateNamespace {
             }
         }
 
-        // Finally, try to load the crate containing the missing symbol.
+        // Finally, try to load the crate that may contain the missing symbol.
         if let Some(weak_sec) = self.load_crate_for_missing_symbol(demangled_full_symbol, temp_backup_namespace, kernel_mmi_ref, verbose_log) {
             weak_sec
         } else {
             #[cfg(not(loscd_eval))]
-            debug!("Symbol \"{}\" not found. Try loading the specific crate manually first.", demangled_full_symbol);
+            warn!("Symbol \"{}\" not found. Try loading the specific crate manually first.", demangled_full_symbol);
             Weak::default() // same as returning None, since it must be upgraded to an Arc before being used
         }
     }
@@ -2654,15 +2649,26 @@ impl CrateNamespace {
     }
 
 
-    /// Attempts to find and load the crate containing the given `demangled_full_symbol`. 
-    /// If successful, the new crate is loaded into this `CrateNamespace` and the symbol's section is returned.
+    /// Attempts to find and load the crate that may contain the given `demangled_full_symbol`. 
     /// 
+    /// If successful, the new crate is loaded into this `CrateNamespace` and the symbol's section is returned.
     /// If this namespace does not contain any matching crates, its recursive namespaces are searched as well.
     /// 
     /// This approach only works for mangled symbols that contain a crate name, such as "my_crate::foo". 
     /// If "foo()" was marked no_mangle, then we don't know which crate to load because there is no "my_crate::" prefix before it.
     /// 
-    /// This is the final attempt to find a symbol within [`get_symbol_or_load()`](#method.get_symbol_or_load).
+    /// Note: while attempting to find the missing `demangled_full_symbol`, this function may end up
+    /// loading *multiple* crates into this `CrateNamespace` or its recursive namespaces, due to two reasons:
+    /// 1. The `demangled_full_symbol` may have multiple crate prefixes within it.
+    ///    * For example, `<page_allocator::AllocatedPages as core::ops::drop::Drop>::drop::h55e0a4c312ccdd63`
+    ///      contains two possible crate prefixes: `page_allocator` and `core`.
+    /// 2. There may be multiple versions of a single crate.
+    /// 
+    /// Possible crates are iteratively loaded and searched until the missing symbol is found.
+    /// Currently, crates that were loaded but did *not* contain the missing symbol are *not* unloaded,
+    /// but you could manually unload them later with no adverse effects to reclaim memory.
+    /// 
+    /// This is the final attempt to find a symbol within [`CrateNamespace::get_symbol_or_load()`].
     fn load_crate_for_missing_symbol(
         &self,
         demangled_full_symbol: &str,
@@ -2676,52 +2682,40 @@ impl CrateNamespace {
  
             // Try to find and load the missing crate object file from this namespace's directory or its recursive namespace's directory,
             // (or from the backup namespace's directory set).
-            // We *do not* search recursively here since we want the new crate to be loaded into the namespace 
-            // that contains its crate object file, not a higher-level namespace. 
-            // Checking recursive namespaces will occur at the end of this function during the recursive call to this same function.
-            let (potential_crate_file, ns_of_crate_file) = match self.method_get_crate_object_file_starting_with(&potential_crate_name) {
-                Some(found) => found,
-                // TODO: should we be blindly recursively searching the backup namespace's files?
-                None => match temp_backup_namespace.and_then(|backup| backup.method_get_crate_object_file_starting_with(&potential_crate_name)) {
-                    // do not modify the backup namespace, instead load its crate into this namespace
-                    Some((crate_file_in_backup_ns, _backup_ns)) => (crate_file_in_backup_ns, self),
-                    None => {
-                        warn!("Couldn't find a single crate object file with prefix {:?} that may contain symbol {:?} in namespace {:?}.", 
-                            potential_crate_name, demangled_full_symbol, self.name);
-                        continue;
-                    }
+            // The object files from the recursive namespace(s) are appended after the files in the initial namespace,
+            // so they'll only be searched if the symbol isn't found in the current namespace.
+            for (potential_crate_file, ns_of_crate_file) in self.method_get_crate_object_files_starting_with(&potential_crate_name) {
+                let potential_crate_file_path = Path::new(potential_crate_file.lock().get_absolute_path());
+                // Check to make sure this crate is not already loaded into this namespace (or its recursive namespace).
+                if self.get_crate(crate_name_from_path(&potential_crate_file_path)).is_some() {
+                    trace!("  (skipping already-loaded crate {:?})", potential_crate_file_path);
+                    continue;
                 }
-            };
-                          
-            let potential_crate_file_path = Path::new(potential_crate_file.lock().get_absolute_path());
-            // Check to make sure this crate is not already loaded into this namespace (or its recursive namespace).
-            if self.get_crate(crate_name_from_path(&potential_crate_file_path)).is_some() {
-                trace!("  (skipping already-loaded crate {:?})", potential_crate_file_path);
-                continue;
-            }
-            #[cfg(not(loscd_eval))]
-            info!("Symbol {:?} not initially found in namespace {:?}, attempting to load crate {:?} into namespace {:?} that may contain it.", 
-                demangled_full_symbol, self.name, potential_crate_name, ns_of_crate_file.name);
+                #[cfg(not(loscd_eval))]
+                info!("Symbol {:?} not initially found in namespace {:?}, attempting to load crate {:?} into namespace {:?} that may contain it.", 
+                    demangled_full_symbol, self.name, potential_crate_name, ns_of_crate_file.name);
 
-            match ns_of_crate_file.load_crate(&potential_crate_file, temp_backup_namespace, kernel_mmi_ref, verbose_log) {
-                Ok((_new_crate_ref, _num_new_syms)) => {
-                    // try again to find the missing symbol, now that we've loaded the missing crate
-                    if let Some(sec) = ns_of_crate_file.get_symbol_internal(demangled_full_symbol) {
-                        return Some(sec);
-                    } else {
-                        // the missing symbol wasn't in this crate, continue to load the other potential containing crates.
-                        trace!("Loaded symbol's containing crate {:?}, but still couldn't find the symbol {:?}.", 
-                            potential_crate_file_path, demangled_full_symbol);
+                match ns_of_crate_file.load_crate(&potential_crate_file, temp_backup_namespace, kernel_mmi_ref, verbose_log) {
+                    Ok((_new_crate_ref, _num_new_syms)) => {
+                        // try again to find the missing symbol, now that we've loaded the missing crate
+                        if let Some(sec) = ns_of_crate_file.get_symbol_internal(demangled_full_symbol) {
+                            return Some(sec);
+                        } else {
+                            // the missing symbol wasn't in this crate, continue to load the other potential containing crates.
+                            trace!("Loaded symbol's containing crate {:?}, but still couldn't find the symbol {:?}.", 
+                                potential_crate_file_path, demangled_full_symbol);
+                        }
+                    }
+                    Err(_e) => {
+                        error!("Found symbol's (\"{}\") containing crate, but couldn't load the crate file {:?}. Error: {:?}",
+                            demangled_full_symbol, potential_crate_file_path, _e);
+                        // We *could* return an error here, but we might as well continue on to trying to load other crates.
                     }
                 }
-                Err(_e) => {
-                    error!("Found symbol's (\"{}\") containing crate, but couldn't load the crate file {:?}. Error: {:?}",
-                        demangled_full_symbol, potential_crate_file_path, _e);
-                    // We *could* return an error here, but we might as well continue on to trying to load other crates.
-                }
-            }
+            } 
         }
 
+        warn!("Couldn't find/load crate(s) that may contain the missing symbol {:?}", demangled_full_symbol);
         None
     }
 
@@ -3056,7 +3050,7 @@ const POINTER_SIZE: usize = size_of::<usize>();
 
 impl TlsInitializer {
     /// Creates an empty TLS initializer with no TLS data sections.
-    fn empty() -> TlsInitializer {
+    const fn empty() -> TlsInitializer {
         TlsInitializer {
             // The data image will be generated lazily on the next request to use it.
             data_cache: Vec::new(),

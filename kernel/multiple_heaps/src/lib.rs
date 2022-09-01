@@ -126,17 +126,13 @@ fn create_heap_mapping(
     size_in_bytes: usize
 ) -> Result<(MappedPages, DeferredAllocAction<'static>), &'static str> {
     let kernel_mmi_ref = get_kernel_mmi_ref().ok_or("create_heap_mapping(): KERNEL_MMI was not yet initialized!")?;
-    let mut kernel_mmi = kernel_mmi_ref.lock();
-
     let (pages, action) = allocate_pages_by_bytes_deferred(Some(starting_address), size_in_bytes)
         .map_err(|_e| "create_heap_mapping(): failed to allocate pages at the starting address")?;
     if pages.start_address().value() % HEAP_MAPPED_PAGES_SIZE_IN_BYTES != 0 {
         return Err("multiple_heaps: the allocated pages for the heap wasn't properly aligned");
     }
-    let mp = kernel_mmi.page_table.map_allocated_pages(pages, HEAP_FLAGS)?;
-
+    let mp = kernel_mmi_ref.lock().page_table.map_allocated_pages(pages, HEAP_FLAGS)?;
     // trace!("Allocated heap pages at: {:#X}", starting_address);
-
     Ok((mp, action))
 }
 
@@ -481,7 +477,6 @@ unsafe impl GlobalAlloc for MultipleHeaps {
 
     /// Allocates the given `layout` from the heap of the core the task is currently running on.
     /// If the per-core heap is not initialized, then an error is returned.
-    #[inline(always)]    
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         // allocate a large object by directly obtaining mapped pages from the OS
         if layout.size() > ZoneAllocator::MAX_ALLOC_SIZE {
@@ -512,7 +507,6 @@ unsafe impl GlobalAlloc for MultipleHeaps {
 
     /// Deallocates the memory at the address given by `ptr`.
     /// Memory is returned to the per-core heap it was allocated from.
-    #[inline(always)]    
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {   
         // deallocate a large object by directly returning mapped pages to the OS
         if layout.size() > ZoneAllocator::MAX_ALLOC_SIZE {

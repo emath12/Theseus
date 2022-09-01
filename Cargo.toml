@@ -18,9 +18,9 @@ members = [
 
 ## Default members are the crates built by default if no specific packages (crates)
 ## are specified when invoking `cargo build`.
-## Currently, this is only relevant when overriding the Makefile's default `CARGOFLAGS`,
-## which has the default value of `--workspace`, ensuring that all `members` above are built
-## `CARGOFLAGS` are explicitly set when invoking `make`.
+## Currently, this is only relevant when overriding the Makefile's default `FEATURES`,
+## which has the default value of `--workspace`, ensuring that all `members` above 
+## are built even when `FEATURES` is explicitly set when invoking `make`.
 ##
 ## So far, this includes only the minimum crates required to allow Theseus to boot.
 default-members = [
@@ -109,9 +109,12 @@ volatile = { git = "https://github.com/theseus-os/volatile" }
 getopts = { git = "https://github.com/theseus-os/getopts" }
 ### use the latest version of smoltcp from github; the one on crates.io is out of date
 smoltcp = { git = "https://github.com/m-labs/smoltcp" }
+### Use our fork of `rangemap`, which makes constructors const functions.
+### This can be removed once this PR lands: <https://github.com/jeffparsons/rangemap/pull/52>
+rangemap = { git = "https://github.com/theseus-os/rangemap", branch = "const_fn_constructor" }
 
 ### Patch `libc` so we can use libc-specific types when using `cfg(target_os = "theseus")`.
-libc = { path = "ports/libc" }
+libc = { git = "https://github.com/theseus-os/libc", branch = "theseus" }
 ### Patch `core2` with newer functions from `std::io`, e.g., additional `Seek` trait functions
 core2 = { path = "libs/core2" }
 ### Patch `bincode` because the version on crates.io doesn't handle no_std features correctly.

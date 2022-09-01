@@ -14,39 +14,25 @@
 
 #[macro_use] extern crate alloc;
 #[macro_use] extern crate log;
-#[macro_use] extern crate debugit;
-extern crate irq_safety;
-extern crate memory;
-extern crate stack;
-extern crate task;
-extern crate runqueue;
-extern crate scheduler;
-extern crate mod_mgmt;
-extern crate apic;
-extern crate context_switch;
-extern crate path;
-extern crate fs_node;
-extern crate catch_unwind;
-extern crate fault_crate_swap;
-extern crate pause;
-extern crate thread_local_macro;
-
 
 use core::{marker::PhantomData, mem, ops::Deref};
 use alloc::{
-    vec::Vec,
+    boxed::Box,
     string::{String, ToString},
     sync::Arc,
-    boxed::Box,
+    vec::Vec,
 };
-use irq_safety::{MutexIrqSafe, hold_interrupts, enable_interrupts};
-use memory::{get_kernel_mmi_ref, MemoryManagementInfo};
+use debugit::debugit;
+use spin::Mutex;
+use irq_safety::enable_interrupts;
+use memory::{get_kernel_mmi_ref, MmiRef};
 use stack::Stack;
-use task::{Task, TaskRef, get_my_current_task, RestartInfo, TASKLIST};
+use task::{Task, TaskRef, get_my_current_task, RestartInfo, TASKLIST, JoinableTaskRef};
 use mod_mgmt::{CrateNamespace, SectionType, SECTION_HASH_DELIMITER};
 use path::Path;
 use apic::get_my_apic_id;
 use fs_node::FileOrDir;
+use preemption::{hold_preemption, PreemptionGuard};
 
 #[cfg(simd_personality)]
 use task::SimdExt;
@@ -55,13 +41,14 @@ use task::SimdExt;
 /// Initializes tasking for the given AP core, including creating a runqueue for it
 /// and creating its initial task bootstrapped from the current execution context for that core. 
 pub fn init(
-    kernel_mmi_ref: Arc<MutexIrqSafe<MemoryManagementInfo>>,
+    kernel_mmi_ref: MmiRef,
     apic_id: u8,
     stack: Stack,
 ) -> Result<BootstrapTaskRef, &'static str> {
     runqueue::init(apic_id)?;
     
     let task_ref = task::bootstrap_task(apic_id, stack, kernel_mmi_ref)?;
+    BOOTSTRAP_TASKS.lock().push(task_ref.clone());
     runqueue::add_task_to_specific_runqueue(apic_id, task_ref.clone())?;
     Ok(BootstrapTaskRef {
         apic_id, 
@@ -69,17 +56,58 @@ pub fn init(
     })
 }
 
-/// A wrapper around a `TaskRef` that is for bootstrapped tasks. 
+/// The set of bootstrap tasks that are created using `task::bootstrap_task()`.
+/// These require special cleanup; see [`cleanup_bootstrap_tasks()`].
+static BOOTSTRAP_TASKS: Mutex<Vec<TaskRef>> = Mutex::new(Vec::new());
+
+/// Spawns a dedicated task to cleanup all bootstrap tasks
+/// by reaping them, i.e., taking their exit value.
 /// 
-/// See `spawn::init()` and `task::bootstrap_task()`.
+/// This allows them to be fully dropped and cleaned up safely,
+/// as it would be invalid to reap and cleanup bootstrap tasks
+/// while the actual bootstrapped task was still running.
 /// 
-/// This exists such that a bootstrapped task can be marked as exited and removed
-/// when being dropped.
+/// ## Arguments
+/// * `num_tasks`: the number of bootstrap tasks that must be cleaned up.
+pub fn cleanup_bootstrap_tasks(num_tasks: usize) -> Result<(), &'static str> {
+    new_task_builder(
+        |total_tasks: usize| {
+            let mut num_tasks_cleaned = 0;
+            while num_tasks_cleaned < total_tasks {
+                if let Some(task) = BOOTSTRAP_TASKS.lock().pop() {
+                    task.join().unwrap();
+                    if let Some(_) = task.take_exit_value() {
+                        // trace!("Cleaned up bootstrap task {:?}", task);
+                        num_tasks_cleaned += 1;
+                    } else {
+                        panic!("BUG: bootstrap task didn't exit before cleanup: {:?}", task);
+                    }
+                }
+            }
+            info!("Cleaned up all {} bootstrap tasks.", total_tasks);
+            *BOOTSTRAP_TASKS.lock() = Vec::new(); // replace the Vec to drop it
+        },
+        num_tasks,
+    )
+    .name(String::from("bootstrap_task_cleanup"))
+    .spawn()?;
+
+    Ok(())
+}
+
+/// A wrapper around a `TaskRef` for bootstrapped tasks, which are the tasks
+/// that represent the first thread of execution on each CPU when it first boots.
+/// 
+/// When a bootstrap task has done everything it needs to do, 
+/// it should invoke [`BootstrapTaskRef::finish()`] to indicate that it's finished,
+/// which will then mark itself as exited and remove itself from runqueues.
+/// 
+/// See [`init()`] and [`task::bootstrap_task()`].
 #[derive(Debug)]
 pub struct BootstrapTaskRef {
     #[allow(dead_code)]
     apic_id: u8,
-    task_ref: TaskRef,
+    task_ref: JoinableTaskRef,
 }
 impl Deref for BootstrapTaskRef {
     type Target = TaskRef;
@@ -87,12 +115,31 @@ impl Deref for BootstrapTaskRef {
         &self.task_ref
     }
 }
+impl BootstrapTaskRef {
+    /// This function represents the final step of each CPU's initialization procedure.
+    /// 
+    /// This function does the following:
+    /// 1. Consumes this bootstrap task such that it can no longer be accessed.
+    /// 2. Marks this bootstrap task as exited.
+    /// 3. Removes this bootstrap task from all this CPU's runqueue.
+    /// 
+    /// This function consumes this bootstrap task, marks it as exited
+    pub fn finish(self) {
+        drop(self);
+    }
+}
 impl Drop for BootstrapTaskRef {
+    // See the documentation for `BootstrapTaskRef::finish()` for more details.
     fn drop(&mut self) {
-        // trace!("Dropping Bootstrap Task on core {}: {:?}", self.apic_id, self.task_ref);
+        // trace!("Finishing Bootstrap Task on core {}: {:?}", self.apic_id, self.task_ref);
         remove_current_task_from_runqueue(&self.task_ref);
-        let _res1 = self.mark_as_exited(Box::new(()));
-        let _ev = self.take_exit_value();
+        self.mark_as_exited(Box::new(()))
+            .expect("BUG: bootstrap task was unable to mark itself as exited");
+
+        // Note: we can mark this bootstrap task as exited here, but we cannot 
+        // reap it (take its exit value) safely because it might be currently running.
+        // Doing so would cause its stack to be deallocated and the current execution to fail.
+        // Instead, that is done in `cleanup_bootstrap_tasks()`.
     }
 }
 
@@ -115,6 +162,19 @@ pub fn new_task_builder<F, A, R>(
     TaskBuilder::new(func, argument)
 }
 
+
+/// Every executable application must have an entry function named "main".
+const ENTRY_POINT_SECTION_NAME: &'static str = "main";
+
+/// The argument type accepted by the `main` function entry point into each application.
+type MainFuncArg = Vec<String>;
+
+/// The type returned by the `main` function entry point of each application.
+type MainFuncRet = isize;
+
+/// The function signature of the `main` function that every application must have,
+/// as it is the entry point into each application `Task`.
+type MainFunc = fn(MainFuncArg) -> MainFuncRet;
 
 /// Creates a builder for a new application `Task`. 
 /// 
@@ -147,7 +207,7 @@ pub fn new_application_task_builder(
     // Load the new application crate
     let app_crate_ref = {
         let kernel_mmi_ref = get_kernel_mmi_ref().ok_or("couldn't get_kernel_mmi_ref")?;
-        CrateNamespace::load_crate_as_application(&namespace, &crate_object_file, &kernel_mmi_ref, false)?
+        CrateNamespace::load_crate_as_application(&namespace, &crate_object_file, kernel_mmi_ref, false)?
     };
 
     // Find the "main" entry point function in the new app crate
@@ -269,7 +329,7 @@ impl<F, A, R> TaskBuilder<F, A, R>
     /// 
     /// This merely makes the new task Runnable, it does not switch to it immediately; that will happen on the next scheduler invocation.
     #[inline(never)]
-    pub fn spawn(self) -> Result<TaskRef, &'static str> {
+    pub fn spawn(self) -> Result<JoinableTaskRef, &'static str> {
         let mut new_task = Task::new(
             None,
             task_cleanup_failure::<F, A, R>,
@@ -313,21 +373,25 @@ impl<F, A, R> TaskBuilder<F, A, R>
 
         let new_task_id = new_task.id;
         let task_ref = TaskRef::new(new_task);
-        let old_task = TASKLIST.lock().insert(new_task_id, task_ref.clone());
+        let _existing_task = TASKLIST.lock().insert(new_task_id, task_ref.clone());
         // insert should return None, because that means there was no existing task with the same ID 
-        if old_task.is_some() {
-            error!("BUG: TaskBuilder::spawn(): Fatal Error: TASKLIST already contained a task with the new task's ID!");
+        if let Some(_existing_task) = _existing_task {
+            error!("BUG: TaskBuilder::spawn(): Fatal Error: TASKLIST already contained a task with the new task's ID! {:?}", _existing_task);
             return Err("BUG: TASKLIST a contained a task with the new task's ID");
         }
         
         if let Some(core) = self.pin_on_core {
             runqueue::add_task_to_specific_runqueue(core, task_ref.clone())?;
-        }
-        else {
+        } else {
             runqueue::add_task_to_any_runqueue(task_ref.clone())?;
         }
 
         Ok(task_ref)
+
+        // Ok(TaskJoiner::<R> {
+        //     task: task_ref,
+        //     _phantom: PhantomData,
+        // })
     }
 
 }
@@ -354,15 +418,36 @@ impl<F, A, R> TaskBuilder<F, A, R>
         self.pin_on_core(core_id)
     }
 
-    /// Like `spawn()`, this finishes this `TaskBuilder` and spawns the new task. 
-    /// It additionally stores the new Task's function and argument within the Task,
+    /// Like [`TaskBuilder::spawn()`], this finishes this `TaskBuilder` and spawns the new task.
+    /// It also stores the new Task's function and argument within the Task,
     /// enabling it to be restarted upon exit.
     /// 
-    /// This merely makes the new task Runnable, it does not switch to it immediately; that will happen on the next scheduler invocation.
+    /// ## Arguments
+    /// * `restart_with_arg`: if `Some`, this argument will be passed into the restarted task
+    ///    instead of the argument initially provided to [`new_task_builder()`].
+    /// 
+    /// Note that the argument initially provided to `new_task_builder()` will *always*
+    /// be passed into the initially-spawned instance of this task.
+    /// The `restart_with_arg` value is only used as an argument for *future* instances
+    /// of this task that are re-spawned (restarted) if the initial task exits.
+    /// 
+    /// This allows one to spawn a task that is restartable but performs a given action
+    /// with its initial argument only once.
+    /// This is typically achieved by using an `Option<T>` for the argument type `A`:
+    /// * The argument `Some(T)` is passed into `new_task_builder()`,
+    ///   such that it is used for and passed to the first spawned instance of this task.
+    /// * The argument `None` is used for `restart_with_arg`,
+    ///   such that it is used for and passed to the subsequent restarted instances of this task.
+    /// 
+    /// This function merely makes the new task Runnable, it does not switch to it immediately;
+    /// that will happen on the next scheduler invocation.
     #[inline(never)]
-    pub fn spawn_restartable(mut self) -> Result<TaskRef, &'static str> {
+    pub fn spawn_restartable(
+        mut self,
+        restart_with_arg: Option<A>
+    ) -> Result<JoinableTaskRef, &'static str> {
         let restart_info = RestartInfo {
-            argument: Box::new(self.argument.clone()),
+            argument: Box::new(restart_with_arg.unwrap_or_else(|| self.argument.clone())),
             func: Box::new(self.func.clone()),
         };
 
@@ -382,18 +467,43 @@ impl<F, A, R> TaskBuilder<F, A, R>
     }
 }
 
-/// Every executable application must have an entry function named "main".
-const ENTRY_POINT_SECTION_NAME: &'static str = "main";
 
-/// The argument type accepted by the `main` function entry point into each application.
-type MainFuncArg = Vec<String>;
+// Note: this is currently not used because it requires many sweeping changes
+//       everywhere that `spawn()` is called to pass on the generic type parameter `R`.
+//
+// /// The object is returned when a new [`Task`] is [`spawn`]ed.
+// /// 
+// /// This allows the "parent" task (the one that spawned this task) to:
+// /// * [`join`] this task, i.e., wait for this task to finish executing,
+// /// * to obtain its [exit value] after it has completed.
+// /// 
+// /// The type parameter `R` is the type that this task will return upon successful completion.
+// /// As such, it is derived from the return type of the entry function `func`
+// /// that was passed into [`new_task_builder()`]
+// /// If dropped, this task will be *detached* and treated as an "orphan" task.
+// /// This means that there is no way for another task to wait for it to complete
+// /// or obtain its exit value.
+// /// As such, this task will be auto-reaped after it exits (in order to avoid zombie tasks).
+// /// 
+// /// Implementation-wise, this is a wrapper around [`JoinableTaskRef`], which marks a task
+// /// as non-joinable when it is dropped.
+// /// This type adds the ability to obtain its exit value as a typed object, 
+// /// because only the [`spawn`] function knows that type `R`, whereas the task itself does not.
+// /// 
+// /// [`spawn`]: TaskBuilder::spawn
+// /// [`join`]: TaskRef::join
+// /// [exit value]: task::ExitValue
+// pub struct TaskJoiner<R: Send + 'static> {
+//     task: JoinableTaskRef,
+//     _phantom: PhantomData<R>,
+// }
+// impl<R: Send + 'static> Deref for TaskJoiner<R> {
+//     type Target = JoinableTaskRef;
+//     fn deref(&self) -> &Self::Target {
+//         &self.task
+//     }
+// }
 
-/// The type returned by the `main` function entry point of each application.
-type MainFuncRet = isize;
-
-/// The function signature of the `main` function that every application must have,
-/// as it is the entry point into each application `Task`.
-type MainFunc = fn(MainFuncArg) -> MainFuncRet;
 
 /// A wrapper around a task's function and argument.
 #[derive(Debug)]
@@ -466,11 +576,24 @@ fn task_wrapper_internal<F, A, R>() -> Result<R, task::KillReason>
           R: Send + 'static,
           F: FnOnce(A) -> R, 
 {
+    let task_entry_func;
+    let task_arg;
+    let recovered_preemption_guard;
+
     // This is scoped to ensure that absolutely no resources that require dropping are held
     // when invoking the task's entry function, in order to simplify cleanup when unwinding.
-    // That is, only non-droppable values on the stack are allowed, nothing can be allocated/locked.
-    let (func, arg) = {
+    // *No* local variables should exist on the stack at the end of this function,
+    // except for the task's `func` and `arg`, which are obviously required.
+    {
         let curr_task = get_my_current_task().expect("BUG: task_wrapper: couldn't get current task (before task func).");
+
+        // The first time that a task runs, its entry function `task_wrapper()` is jumped to
+        // from the `task_switch()` function, right after the end of `context_switch`().
+        // Thus, the first thing we must do here is to perform post-context switch actions,
+        // because this is the first code to run immediately after a context switch
+        // switches to this task for the first time.
+        // For more details, see the comments at the end of `Task::task_switch()`.
+        recovered_preemption_guard = curr_task.post_context_switch_action();
 
         // This task's function and argument were placed at the bottom of the stack when this task was spawned.
         let task_func_arg = curr_task.with_kstack(|kstack| {
@@ -480,20 +603,28 @@ fn task_wrapper_internal<F, A, R>() -> Result<R, task::KillReason>
                 *tfa_boxed // un-box it
             })
         }).expect("BUG: task_wrapper: couldn't access task's function/argument at bottom of stack");
-        let (func, arg) = (task_func_arg.func, task_func_arg.arg);
+        task_entry_func = task_func_arg.func;
+        task_arg  = task_func_arg.arg;
 
         #[cfg(not(any(rq_eval, downtime_eval)))]
         debug!("task_wrapper [1]: \"{}\" about to call task entry func {:?} {{{}}} with arg {:?}",
-            curr_task.name.clone(), debugit!(func), core::any::type_name::<F>(), debugit!(arg)
+            curr_task.name.clone(), debugit!(task_entry_func), core::any::type_name::<F>(), debugit!(task_arg)
         );
-
-        (func, arg)
     };
 
-    enable_interrupts(); // we must enable interrupts for the new task, otherwise we won't be able to preempt it.
+    // The first time that a task runs, its entry function `task_wrapper()` is jumped to
+    // from the `task_switch()` function, right after the context switch occurred.
+    // Since the `task_switch()` function was originally invoked from an interrupt handler,
+    // interrupts were disabled but never had the chance to be re-enabled
+    // because we did not return from the interrupt handler as usual.
+    // Therefore, we need to re-enable interrupts and preemption here to ensure that
+    // things continue to run as normal, with interrupts and preemption enabled
+    // such that we can properly preempt this task.
+    drop(recovered_preemption_guard);
+    enable_interrupts();
 
     // Now we actually invoke the entry point function that this Task was spawned for, catching a panic if one occurs.
-    catch_unwind::catch_unwind_with_arg(func, arg)
+    catch_unwind::catch_unwind_with_arg(task_entry_func, task_arg)
 }
 
 /// The entry point for all new `Task`s except restartable tasks. 
@@ -546,11 +677,11 @@ fn task_wrapper_restartable<F, A, R>() -> !
 /// Internal function cleans up a task that exited properly. 
 /// Contains the shared code between `task_cleanup_success` and `task_cleanup_success_restartable`
 #[inline(always)]
-fn task_cleanup_success_internal<R>(current_task: TaskRef, exit_value: R) -> (irq_safety::HeldInterrupts, TaskRef)
+fn task_cleanup_success_internal<R>(current_task: TaskRef, exit_value: R) -> (PreemptionGuard, TaskRef)
     where R: Send + 'static,
 { 
-    // Disable preemption (currently just disabling interrupts altogether)
-    let held_interrupts = hold_interrupts();
+    // Disable preemption.
+    let preemption_guard = hold_preemption();
 
     #[cfg(not(rq_eval))]
     debug!("task_cleanup_success: {:?} successfully exited with return value {:?}", current_task.name, debugit!(exit_value));
@@ -558,7 +689,7 @@ fn task_cleanup_success_internal<R>(current_task: TaskRef, exit_value: R) -> (ir
         error!("task_cleanup_success: {:?} task could not set exit value, because task had already exited. Is this correct?", current_task.name);
     }
 
-    (held_interrupts, current_task)
+    (preemption_guard, current_task)
 }
 
 /// This function cleans up a task that exited properly.
@@ -567,8 +698,8 @@ fn task_cleanup_success<F, A, R>(current_task: TaskRef, exit_value: R) -> !
           R: Send + 'static,
           F: FnOnce(A) -> R, 
 {   
-    let (held_interrupts, current_task) = task_cleanup_success_internal(current_task, exit_value);
-    task_cleanup_final::<F, A, R>(held_interrupts, current_task)
+    let (preemption_guard, current_task) = task_cleanup_success_internal(current_task, exit_value);
+    task_cleanup_final::<F, A, R>(preemption_guard, current_task)
 }
 
 /// Similar to `task_cleanup_success` but used on restartable_tasks
@@ -577,17 +708,17 @@ fn task_restartable_cleanup_success<F, A, R>(current_task: TaskRef, exit_value: 
           R: Send + 'static,
           F: FnOnce(A) -> R + Send + Clone +'static,
 {
-    let (held_interrupts, current_task) = task_cleanup_success_internal(current_task, exit_value);
-    task_restartable_cleanup_final::<F, A, R>(held_interrupts, current_task)
+    let (preemption_guard, current_task) = task_cleanup_success_internal(current_task, exit_value);
+    task_restartable_cleanup_final::<F, A, R>(preemption_guard, current_task)
 }
 
 
 
 /// Internal function that cleans up a task that did not exit properly.
 #[inline(always)]
-fn task_cleanup_failure_internal(current_task: TaskRef, kill_reason: task::KillReason) -> (irq_safety::HeldInterrupts, TaskRef) {
-    // Disable preemption (currently just disabling interrupts altogether)
-    let held_interrupts = hold_interrupts();
+fn task_cleanup_failure_internal(current_task: TaskRef, kill_reason: task::KillReason) -> (PreemptionGuard, TaskRef) {
+    // Disable preemption.
+    let preemption_guard = hold_preemption();
 
     #[cfg(not(downtime_eval))]
     debug!("task_cleanup_failure: {:?} panicked with {:?}", current_task.name, kill_reason);
@@ -596,7 +727,7 @@ fn task_cleanup_failure_internal(current_task: TaskRef, kill_reason: task::KillR
         error!("task_cleanup_failure: {:?} task could not set kill reason, because task had already exited. Is this correct?", current_task.name);
     }
 
-    (held_interrupts, current_task)
+    (preemption_guard, current_task)
 }     
 
 /// This function cleans up a task that did not exit properly,
@@ -611,8 +742,8 @@ fn task_cleanup_failure<F, A, R>(current_task: TaskRef, kill_reason: task::KillR
           R: Send + 'static,
           F: FnOnce(A) -> R, 
 {
-    let (held_interrupts, current_task) = task_cleanup_failure_internal(current_task, kill_reason);
-    task_cleanup_final::<F, A, R>(held_interrupts, current_task)
+    let (preemption_guard, current_task) = task_cleanup_failure_internal(current_task, kill_reason);
+    task_cleanup_final::<F, A, R>(preemption_guard, current_task)
 }
 
 /// Similar to `task_cleanup_failure` but used on restartable_tasks
@@ -621,8 +752,8 @@ fn task_restartable_cleanup_failure<F, A, R>(current_task: TaskRef, kill_reason:
           R: Send + 'static,
           F: FnOnce(A) -> R + Send + Clone + 'static, 
 {
-    let (held_interrupts, current_task) = task_cleanup_failure_internal(current_task, kill_reason);
-    task_restartable_cleanup_final::<F, A, R>(held_interrupts, current_task)
+    let (preemption_guard, current_task) = task_cleanup_failure_internal(current_task, kill_reason);
+    task_restartable_cleanup_final::<F, A, R>(preemption_guard, current_task)
 }
 
 
@@ -639,19 +770,26 @@ fn task_cleanup_final_internal(current_task: &TaskRef) {
             (tls_dtor.dtor)(tls_dtor.object_ptr as *mut u8);
         }
     }
+
+    // Third, reap the task if it has been orphaned (if it's non-joinable).
+    if !current_task.is_joinable() {
+        // trace!("Reaping orphaned task... {:?}", current_task);
+        let _exit_value = current_task.take_exit_value();
+        // trace!("Reaped orphaned task {:?}, {:?}", current_task, _exit_value);
+    }
 }
 
 
 /// The final piece of the task cleanup logic,
 /// which removes the task from its runqueue and permanently deschedules it. 
-fn task_cleanup_final<F, A, R>(held_interrupts: irq_safety::HeldInterrupts, current_task: TaskRef) -> ! 
+fn task_cleanup_final<F, A, R>(preemption_guard: PreemptionGuard, current_task: TaskRef) -> ! 
     where A: Send + 'static, 
           R: Send + 'static,
           F: FnOnce(A) -> R, 
 {
     task_cleanup_final_internal(&current_task);
     drop(current_task);
-    drop(held_interrupts);
+    drop(preemption_guard);
     // ****************************************************
     // NOTE: nothing below here is guaranteed to run again!
     // ****************************************************
@@ -664,7 +802,7 @@ fn task_cleanup_final<F, A, R>(held_interrupts: irq_safety::HeldInterrupts, curr
 /// The final piece of the task cleanup logic for restartable tasks.
 /// which removes the task from its runqueue and spawns it again with 
 /// same entry function (F) and argument (A). 
-fn task_restartable_cleanup_final<F, A, R>(held_interrupts: irq_safety::HeldInterrupts, current_task: TaskRef) -> ! 
+fn task_restartable_cleanup_final<F, A, R>(preemption_guard: PreemptionGuard, current_task: TaskRef) -> !
    where A: Send + Clone + 'static, 
          R: Send + 'static,
          F: FnOnce(A) -> R + Send + Clone + 'static, 
@@ -725,7 +863,7 @@ fn task_restartable_cleanup_final<F, A, R>(held_interrupts: irq_safety::HeldInte
             if let Some(core) = current_task.pinned_core() {
                 new_task = new_task.pin_on_core(core);
             }
-            new_task.spawn_restartable()
+            new_task.spawn_restartable(None)
                 .expect("Failed to respawn the restartable task");
         } else {
             error!("BUG: Restartable task has no restart information available");
@@ -733,7 +871,7 @@ fn task_restartable_cleanup_final<F, A, R>(held_interrupts: irq_safety::HeldInte
     }
 
     drop(current_task);
-    drop(held_interrupts);
+    drop(preemption_guard);
     // ****************************************************
     // NOTE: nothing below here is guaranteed to run again!
     // ****************************************************
@@ -769,25 +907,24 @@ fn remove_current_task_from_runqueue(current_task: &TaskRef) {
     }
 }
 
-/// Spawns an idle task on the given `core` if specified, otherwise on the current core. 
-/// Then, it adds adds the new idle task to that core's runqueue.
-pub fn create_idle_task(core: Option<u8>) -> Result<TaskRef, &'static str> {
-    let apic_id = core.unwrap_or_else(|| get_my_apic_id());
+/// Spawns an idle task on the current CPU and adds it to this CPU's runqueue.
+pub fn create_idle_task() -> Result<JoinableTaskRef, &'static str> {
+    let apic_id = get_my_apic_id();
     debug!("Spawning a new idle task on core {}", apic_id);
 
-    new_task_builder(dummy_idle_task, apic_id)
+    new_task_builder(idle_task_entry, apic_id)
         .name(format!("idle_task_core_{}", apic_id))
         .idle(apic_id)
-        .spawn_restartable()
+        .spawn_restartable(None)
 }
 
-/// Dummy `idle_task` to be used if original `idle_task` crashes.
+/// A basic idle task that does nothing but loop endlessly.
 /// 
 /// Note: the current spawn API does not support spawning a task with the return type `!`,
 /// so we use `()` here instead. 
 #[inline(never)]
-fn dummy_idle_task(_apic_id: u8) {
-    info!("Entered idle task loop on core {}: {:?}", _apic_id, task::get_my_current_task());
+fn idle_task_entry(_apic_id: u8) {
+    info!("Entered idle task loop on core {}: {:?}", apic::get_my_apic_id(), task::get_my_current_task());
     loop {
         // TODO: put this core into a low-power state
         pause::spin_loop_hint();
