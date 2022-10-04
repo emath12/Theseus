@@ -1,9 +1,10 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `kernel/crate_metadata/src/lib.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>lib.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceSerif4-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../FiraSans-Regular.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../FiraSans-Medium.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceCodePro-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceSerif4-Bold.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceCodePro-Semibold.ttf.woff2"><link rel="stylesheet" type="text/css" href="../../normalize.css"><link rel="stylesheet" type="text/css" href="../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" type="text/css" href="../../ayu.css" disabled><link rel="stylesheet" type="text/css" href="../../dark.css" disabled><link rel="stylesheet" type="text/css" href="../../light.css" id="themeStyle"><script id="default-settings" ></script><script src="../../storage.js"></script><script src="../../crates.js"></script><script defer src="../../main.js"></script><script defer src="../../source-script.js"></script><script defer src="../../source-files.js"></script>
-    <noscript><link rel="stylesheet" href="../../noscript.css"></noscript><link rel="alternate icon" type="image/png" href="../../favicon-16x16.png"><link rel="alternate icon" type="image/png" href="../../favicon-32x32.png"><link rel="icon" type="image/svg+xml" href="../../favicon.svg"></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle">&#9776;</button><a class="sidebar-logo" href="../../crate_metadata/index.html"><div class="logo-container"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></div>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `kernel/crate_metadata/src/lib.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>lib.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceSerif4-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../FiraSans-Regular.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../FiraSans-Medium.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceCodePro-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceSerif4-Bold.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceCodePro-Semibold.ttf.woff2"><link rel="stylesheet" type="text/css" href="../../normalize.css"><link rel="stylesheet" type="text/css" href="../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" type="text/css" href="../../ayu.css" disabled><link rel="stylesheet" type="text/css" href="../../dark.css" disabled><link rel="stylesheet" type="text/css" href="../../light.css" id="themeStyle"><script id="default-settings" ></script><script src="../../storage.js"></script><script defer src="../../source-script.js"></script><script defer src="../../source-files.js"></script><script defer src="../../main.js"></script><noscript><link rel="stylesheet" href="../../noscript.css"></noscript><link rel="alternate icon" type="image/png" href="../../favicon-16x16.png"><link rel="alternate icon" type="image/png" href="../../favicon-32x32.png"><link rel="icon" type="image/svg+xml" href="../../favicon.svg"></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle">&#9776;</button><a class="sidebar-logo" href="../../crate_metadata/index.html"><div class="logo-container"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></div>
         </a><h2 class="location"></h2>
     </nav>
     <nav class="sidebar"><a class="sidebar-logo" href="../../crate_metadata/index.html"><div class="logo-container"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></div>
-        </a></nav><main><div class="width-limiter"><div class="sub-container"><a class="sub-logo-container" href="../../crate_metadata/index.html"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></a><nav class="sub"><div class="theme-picker hidden"><button id="theme-picker" aria-label="Pick another theme!" aria-haspopup="menu" title="themes"><img width="22" height="22" alt="Pick another theme!" src="../../brush.svg"></button><div id="theme-choices" role="menu"></div></div><form class="search-form"><div class="search-container"><span></span><input class="search-input" name="search" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><button type="button" id="help-button" title="help">?</button><a id="settings-menu" href="../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../wheel.svg"></a></div></form></nav></div><section id="main-content" class="content"><div class="example-wrap"><pre class="line-numbers"><span id="1">1</span>
+        </a></nav><main><div class="width-limiter"><div class="sub-container"><a class="sub-logo-container" href="../../crate_metadata/index.html"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></a><nav class="sub"><form class="search-form"><div class="search-container"><span></span><input class="search-input" name="search" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><button type="button">?</button></div><div id="settings-menu" tabindex="-1">
+                                <a href="../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../wheel.svg"></a></div>
+                        </div></form></nav></div><section id="main-content" class="content"><div class="example-wrap"><pre class="line-numbers"><span id="1">1</span>
 <span id="2">2</span>
 <span id="3">3</span>
 <span id="4">4</span>
@@ -1059,6 +1060,30 @@
 <span id="1054">1054</span>
 <span id="1055">1055</span>
 <span id="1056">1056</span>
+<span id="1057">1057</span>
+<span id="1058">1058</span>
+<span id="1059">1059</span>
+<span id="1060">1060</span>
+<span id="1061">1061</span>
+<span id="1062">1062</span>
+<span id="1063">1063</span>
+<span id="1064">1064</span>
+<span id="1065">1065</span>
+<span id="1066">1066</span>
+<span id="1067">1067</span>
+<span id="1068">1068</span>
+<span id="1069">1069</span>
+<span id="1070">1070</span>
+<span id="1071">1071</span>
+<span id="1072">1072</span>
+<span id="1073">1073</span>
+<span id="1074">1074</span>
+<span id="1075">1075</span>
+<span id="1076">1076</span>
+<span id="1077">1077</span>
+<span id="1078">1078</span>
+<span id="1079">1079</span>
+<span id="1080">1080</span>
 </pre><pre class="rust"><code><span class="doccomment">//! Defines types that contain metadata about crates loaded in Theseus and their dependencies.</span>
 <span class="doccomment">//! </span>
 <span class="doccomment">//! ## Representing dependencies between sections</span>
@@ -1101,6 +1126,7 @@
 <span class="doccomment">//! [`B.sections_dependent_on_me`]: LoadedSectionInner::sections_dependent_on_me</span>
 <span class="doccomment">//! </span>
 
+<span class="attribute">#![<span class="ident">deny</span>(<span class="ident">unsafe_op_in_unsafe_fn</span>)]</span>
 <span class="attribute">#![<span class="ident">no_std</span>]</span>
 
 <span class="kw">extern</span> <span class="kw">crate</span> <span class="ident">alloc</span>;
@@ -1108,9 +1134,8 @@
 <span class="kw">use</span> <span class="ident">core::convert::TryFrom</span>;
 <span class="kw">use</span> <span class="ident">core::fmt</span>;
 <span class="kw">use</span> <span class="ident">core::ops::Range</span>;
-<span class="kw">use</span> <span class="ident">lazy_static::lazy_static</span>;
 <span class="kw">use</span> <span class="ident">log</span>::{<span class="ident">error</span>, <span class="ident">debug</span>, <span class="ident">trace</span>};
-<span class="kw">use</span> <span class="ident">spin</span>::{<span class="ident">Mutex</span>, <span class="ident">RwLock</span>};
+<span class="kw">use</span> <span class="ident">spin</span>::{<span class="ident">Mutex</span>, <span class="ident">RwLock</span>, <span class="ident">Once</span>};
 <span class="kw">use</span> <span class="ident">alloc</span>::{
     <span class="ident">collections::BTreeSet</span>,
     <span class="ident">format</span>,
@@ -1125,7 +1150,20 @@
 <span class="kw">use</span> <span class="ident">fs_node</span>::{<span class="ident">FileRef</span>, <span class="ident">WeakFileRef</span>};
 <span class="kw">use</span> <span class="ident">hashbrown::HashMap</span>;
 <span class="kw">use</span> <span class="ident">goblin::elf::reloc</span>::<span class="kw-2">*</span>;
+
 <span class="kw">pub</span> <span class="kw">use</span> <span class="ident">str_ref::StrRef</span>;
+<span class="kw">pub</span> <span class="kw">use</span> <span class="ident">crate_metadata_serde</span>::{
+    <span class="ident">SectionType</span>,
+    <span class="ident">Shndx</span>,
+    <span class="ident">TEXT_SECTION_NAME</span>,
+    <span class="ident">RODATA_SECTION_NAME</span>,
+    <span class="ident">DATA_SECTION_NAME</span>,
+    <span class="ident">BSS_SECTION_NAME</span>,
+    <span class="ident">TLS_DATA_SECTION_NAME</span>,
+    <span class="ident">TLS_BSS_SECTION_NAME</span>,
+    <span class="ident">GCC_EXCEPT_TABLE_SECTION_NAME</span>,
+    <span class="ident">EH_FRAME_SECTION_NAME</span>,
+};
 
 
 <span class="doccomment">/// A Strong reference to a [`LoadedCrate`].</span>
@@ -1136,16 +1174,6 @@
 <span class="kw">pub</span> <span class="kw">type</span> <span class="ident">StrongSectionRef</span>  <span class="op">=</span> <span class="ident">Arc</span><span class="op">&lt;</span><span class="ident">LoadedSection</span><span class="op">&gt;</span>;
 <span class="doccomment">/// A Weak reference ([`Weak`]) to a [`LoadedSection`].</span>
 <span class="kw">pub</span> <span class="kw">type</span> <span class="ident">WeakSectionRef</span> <span class="op">=</span> <span class="ident">Weak</span><span class="op">&lt;</span><span class="ident">LoadedSection</span><span class="op">&gt;</span>;
-<span class="doccomment">/// A Section Header iNDeX (SHNDX), as specified by the ELF format. </span>
-<span class="doccomment">/// Even though this is typically encoded as a `u16`, its decoded form can exceed the max size of `u16`.</span>
-<span class="kw">pub</span> <span class="kw">type</span> <span class="ident">Shndx</span> <span class="op">=</span> <span class="ident">usize</span>;
-
-<span class="macro">lazy_static!</span> {
-    <span class="doccomment">/// &quot;.eh_frame&quot; as a single, system-wide allocated `StrRef`.</span>
-    <span class="kw">pub</span> <span class="kw">static</span> <span class="kw-2">ref</span> <span class="ident">EH_FRAME_STR_REF</span>: <span class="ident">StrRef</span> <span class="op">=</span> <span class="ident">StrRef::from</span>(<span class="string">&quot;.eh_frame&quot;</span>);
-    <span class="doccomment">/// &quot;.gcc_except_table&quot; as a single, system-wide allocated `StrRef`.</span>
-    <span class="kw">pub</span> <span class="kw">static</span> <span class="kw-2">ref</span> <span class="ident">GCC_EXCEPT_TABLE_STR_REF</span>: <span class="ident">StrRef</span> <span class="op">=</span> <span class="ident">StrRef::from</span>(<span class="string">&quot;.gcc_except_table&quot;</span>);
-}
 
 <span class="doccomment">/// `.text` sections are read-only and executable.</span>
 <span class="kw">pub</span> <span class="kw">const</span> <span class="ident">TEXT_SECTION_FLAGS</span>:     <span class="ident">EntryFlags</span> <span class="op">=</span> <span class="ident">EntryFlags::PRESENT</span>;
@@ -1322,7 +1350,7 @@
                 .<span class="ident">map</span>(<span class="op">|</span><span class="ident">f</span><span class="op">|</span> <span class="ident">f</span>.<span class="ident">get_absolute_path</span>())
                 .<span class="ident">unwrap_or_else</span>(<span class="op">|</span><span class="op">|</span> <span class="macro">format!</span>(<span class="string">&quot;&lt;Locked&gt;&quot;</span>))
             )
-            .<span class="ident">finish</span>()
+            .<span class="ident">finish_non_exhaustive</span>()
     }
 }
 
@@ -1639,52 +1667,34 @@
 }
 
 
-<span class="doccomment">/// The possible types of sections that can be loaded from a crate object file.</span>
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Copy</span>, <span class="ident">Clone</span>, <span class="ident">PartialEq</span>, <span class="ident">serde::Serialize</span>, <span class="ident">serde::Deserialize</span>)]</span>
-<span class="kw">pub</span> <span class="kw">enum</span> <span class="ident">SectionType</span> {
-    <span class="doccomment">/// A `text` section contains executable code, i.e., functions. </span>
-    <span class="ident">Text</span>,
-    <span class="doccomment">/// An `rodata` section contains read-only data, i.e., constants.</span>
-    <span class="ident">Rodata</span>,
-    <span class="doccomment">/// A `data` section contains data that is both readable and writable, i.e., static variables. </span>
-    <span class="ident">Data</span>,
-    <span class="doccomment">/// A `bss` section is just like a data section, but is automatically initialized to all zeroes at load time.</span>
-    <span class="ident">Bss</span>,
-    <span class="doccomment">/// A `.tdata` section is a read-only section that holds the initial data &quot;image&quot; </span>
-    <span class="doccomment">/// for a thread-local storage (TLS) area.</span>
-    <span class="ident">TlsData</span>, 
-    <span class="doccomment">/// A `.tbss` section is a read-only section that holds all-zero data for a thread-local storage (TLS) area.</span>
-    <span class="doccomment">/// This is is effectively an empty placeholder: the all-zero data section doesn&#39;t actually exist in memory.</span>
-    <span class="ident">TlsBss</span>,
-    <span class="doccomment">/// A `.gcc_except_table` section contains landing pads for exception handling,</span>
-    <span class="doccomment">/// comprising the LSDA (Language Specific Data Area),</span>
-    <span class="doccomment">/// which is effectively used to determine when we should stop the stack unwinding process</span>
-    <span class="doccomment">/// (e.g., &quot;catching&quot; an exception). </span>
-    <span class="doccomment">/// </span>
-    <span class="doccomment">/// Blog post from author of gold linker: &lt;https://www.airs.com/blog/archives/464&gt;</span>
-    <span class="doccomment">/// </span>
-    <span class="doccomment">/// Mailing list discussion here: &lt;https://gcc.gnu.org/ml/gcc-help/2010-09/msg00116.html&gt;</span>
-    <span class="doccomment">/// </span>
-    <span class="doccomment">/// Here is a sample repository parsing this section: &lt;https://github.com/nest-leonlee/gcc_except_table&gt;</span>
-    <span class="doccomment">/// </span>
-    <span class="ident">GccExceptTable</span>,
-    <span class="doccomment">/// The `.eh_frame` section contains information about stack unwinding and destructor functions</span>
-    <span class="doccomment">/// that should be called when traversing up the stack for cleanup. </span>
-    <span class="doccomment">/// </span>
-    <span class="doccomment">/// Blog post from author of gold linker: &lt;https://www.airs.com/blog/archives/460&gt;</span>
-    <span class="doccomment">/// Some documentation here: &lt;https://gcc.gnu.org/wiki/Dwarf2EHNewbiesHowto&gt;</span>
-    <span class="doccomment">/// </span>
-    <span class="ident">EhFrame</span>,
+<span class="doccomment">/// Returns the default name for the given `SectionType` as a [`StrRef`].</span>
+<span class="doccomment">/// </span>
+<span class="doccomment">/// This is useful for deduplicating section name strings in memory,</span>
+<span class="doccomment">/// as the returned `StrRef` will point back to a single instance </span>
+<span class="doccomment">/// of that section name string that can be shared across the system.</span>
+<span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">section_name_str_ref</span>(<span class="ident">section_type</span>: <span class="kw-2">&amp;</span><span class="ident">SectionType</span>) -&gt; <span class="ident">StrRef</span> {
+    <span class="kw">static</span> <span class="ident">TEXT</span>             : <span class="ident">Once</span><span class="op">&lt;</span><span class="ident">StrRef</span><span class="op">&gt;</span> <span class="op">=</span> <span class="ident">Once::new</span>();
+    <span class="kw">static</span> <span class="ident">RODATA</span>           : <span class="ident">Once</span><span class="op">&lt;</span><span class="ident">StrRef</span><span class="op">&gt;</span> <span class="op">=</span> <span class="ident">Once::new</span>();
+    <span class="kw">static</span> <span class="ident">DATA</span>             : <span class="ident">Once</span><span class="op">&lt;</span><span class="ident">StrRef</span><span class="op">&gt;</span> <span class="op">=</span> <span class="ident">Once::new</span>();
+    <span class="kw">static</span> <span class="ident">BSS</span>              : <span class="ident">Once</span><span class="op">&lt;</span><span class="ident">StrRef</span><span class="op">&gt;</span> <span class="op">=</span> <span class="ident">Once::new</span>();
+    <span class="kw">static</span> <span class="ident">TLS_DATA</span>         : <span class="ident">Once</span><span class="op">&lt;</span><span class="ident">StrRef</span><span class="op">&gt;</span> <span class="op">=</span> <span class="ident">Once::new</span>();
+    <span class="kw">static</span> <span class="ident">TLS_BSS</span>          : <span class="ident">Once</span><span class="op">&lt;</span><span class="ident">StrRef</span><span class="op">&gt;</span> <span class="op">=</span> <span class="ident">Once::new</span>();
+    <span class="kw">static</span> <span class="ident">GCC_EXCEPT_TABLE</span> : <span class="ident">Once</span><span class="op">&lt;</span><span class="ident">StrRef</span><span class="op">&gt;</span> <span class="op">=</span> <span class="ident">Once::new</span>();
+    <span class="kw">static</span> <span class="ident">EH_FRAME</span>         : <span class="ident">Once</span><span class="op">&lt;</span><span class="ident">StrRef</span><span class="op">&gt;</span> <span class="op">=</span> <span class="ident">Once::new</span>();
+
+    <span class="kw">let</span> <span class="ident">instance</span> <span class="op">=</span> <span class="kw">match</span> <span class="ident">section_type</span> {
+        <span class="ident">SectionType::Text</span>           =&gt; <span class="kw-2">&amp;</span><span class="ident">TEXT</span>,
+        <span class="ident">SectionType::Rodata</span>         =&gt; <span class="kw-2">&amp;</span><span class="ident">RODATA</span>,
+        <span class="ident">SectionType::Data</span>           =&gt; <span class="kw-2">&amp;</span><span class="ident">DATA</span>,
+        <span class="ident">SectionType::Bss</span>            =&gt; <span class="kw-2">&amp;</span><span class="ident">BSS</span>,
+        <span class="ident">SectionType::TlsData</span>        =&gt; <span class="kw-2">&amp;</span><span class="ident">TLS_DATA</span>,
+        <span class="ident">SectionType::TlsBss</span>         =&gt; <span class="kw-2">&amp;</span><span class="ident">TLS_BSS</span>,
+        <span class="ident">SectionType::GccExceptTable</span> =&gt; <span class="kw-2">&amp;</span><span class="ident">GCC_EXCEPT_TABLE</span>,
+        <span class="ident">SectionType::EhFrame</span>        =&gt; <span class="kw-2">&amp;</span><span class="ident">EH_FRAME</span>,
+    };
+    <span class="ident">instance</span>.<span class="ident">call_once</span>(<span class="op">|</span><span class="op">|</span> <span class="ident">StrRef::from</span>(<span class="ident">section_type</span>.<span class="ident">name</span>())).<span class="ident">clone</span>()
 }
-<span class="kw">impl</span> <span class="ident">SectionType</span> {
-    <span class="doccomment">/// Returns `true` if `Data` or `Bss`, otherwise `false`.</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">is_data_or_bss</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="ident">bool</span> {
-        <span class="kw">match</span> <span class="self">self</span> {
-            <span class="ident"><span class="self">Self</span>::Data</span> <span class="op">|</span> <span class="ident"><span class="self">Self</span>::Bss</span> =&gt; <span class="bool-val">true</span>,
-            <span class="kw">_</span> =&gt; <span class="bool-val">false</span>,
-        }
-    }
-}
+
 
 <span class="doccomment">/// The parts of a `LoadedSection` that may be mutable, i.e., </span>
 <span class="doccomment">/// only the parts that could change after a section is initially loaded and linked.</span>
@@ -1888,6 +1898,9 @@
     <span class="doccomment">/// Returns a reference to the function that is formed from the underlying memory region,</span>
     <span class="doccomment">/// with a lifetime dependent upon the lifetime of this section.</span>
     <span class="doccomment">///</span>
+    <span class="doccomment">/// # Safety</span>
+    <span class="doccomment">/// The type signature of `F` must match the type signature of the function.</span>
+    <span class="doccomment">///</span>
     <span class="doccomment">/// # Locking</span>
     <span class="doccomment">/// Obtains the lock on this section&#39;s `MappedPages` object.</span>
     <span class="doccomment">///</span>
@@ -1903,11 +1916,11 @@
     <span class="doccomment">/// ```</span>
     <span class="doccomment">/// type MyPrintFuncSignature = fn(&amp;str) -&gt; Result&lt;(), &amp;&#39;static str&gt;;</span>
     <span class="doccomment">/// let section = mod_mgmt::get_symbol_starting_with(&quot;my_crate::print::&quot;).upgrade().unwrap();</span>
-    <span class="doccomment">/// let print_func: &amp;MyPrintFuncSignature = section.as_func().unwrap();</span>
+    <span class="doccomment">/// let print_func: &amp;MyPrintFuncSignature = unsafe { section.as_func() }.unwrap();</span>
     <span class="doccomment">/// print_func(&quot;hello there&quot;);</span>
     <span class="doccomment">/// ```</span>
     <span class="doccomment">/// </span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">as_func</span><span class="op">&lt;</span><span class="ident">F</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="kw-2">&amp;</span><span class="ident">F</span>, <span class="kw-2">&amp;</span><span class="lifetime">&#39;static</span> <span class="ident">str</span><span class="op">&gt;</span> {
+    <span class="kw">pub</span> <span class="kw">unsafe</span> <span class="kw">fn</span> <span class="ident">as_func</span><span class="op">&lt;</span><span class="ident">F</span><span class="op">&gt;</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="kw-2">&amp;</span><span class="ident">F</span>, <span class="kw-2">&amp;</span><span class="lifetime">&#39;static</span> <span class="ident">str</span><span class="op">&gt;</span> {
         <span class="kw">if</span> <span class="bool-val">false</span> {
             <span class="macro">debug!</span>(<span class="string">&quot;Requested LoadedSection {:#X?} as function {:?}&quot;</span>, <span class="self">self</span>, <span class="ident">core::any::type_name</span>::<span class="op">&lt;</span><span class="ident">F</span><span class="op">&gt;</span>());
         }
@@ -1930,8 +1943,10 @@
             <span class="kw">return</span> <span class="prelude-val">Err</span>(<span class="string">&quot;requested type and offset would not fit within the MappedPages bounds&quot;</span>);
         }
 
-        <span class="comment">// SAFE: above, we check the section type, executability, and size bounds of its underlying MappedPages</span>
-        <span class="comment">//       and tie the lifetime of the returned function reference to this section&#39;s lifetime.</span>
+        <span class="comment">// SAFETY: We checked the section type, executability, and size bounds of the</span>
+        <span class="comment">// underlying MappedPages above. The lifetime of the returned function</span>
+        <span class="comment">// reference is tied to this section&#39;s lifetime. The caller guarantees</span>
+        <span class="comment">// that the function signature matches.</span>
         <span class="prelude-val">Ok</span>(<span class="kw">unsafe</span> { 
             <span class="ident">core::mem::transmute</span>(
                 <span class="kw-2">&amp;</span>(<span class="ident">mp</span>.<span class="ident">start_address</span>().<span class="ident">value</span>() <span class="op">+</span> <span class="self">self</span>.<span class="ident">mapped_pages_offset</span>)
@@ -1940,9 +1955,43 @@
     }
 }
 
+<span class="kw">impl</span> <span class="ident">fmt::Display</span> <span class="kw">for</span> <span class="ident">LoadedSection</span> {
+    <span class="kw">fn</span> <span class="ident">fmt</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">f</span>: <span class="kw-2">&amp;mut</span> <span class="ident">fmt::Formatter</span>) -&gt; <span class="ident">fmt::Result</span> {
+        <span class="macro">write!</span>(
+            <span class="ident">f</span>,
+            <span class="string">&quot;LoadedSection({:?}, typ: {:?}, vaddr: {:#X}, size: {})&quot;</span>, 
+            <span class="self">self</span>.<span class="ident">name</span>,
+            <span class="self">self</span>.<span class="ident">typ</span>,
+            <span class="self">self</span>.<span class="ident">start_address</span>(),
+            <span class="self">self</span>.<span class="ident">size</span>(),
+        )
+    }
+}
+
 <span class="kw">impl</span> <span class="ident">fmt::Debug</span> <span class="kw">for</span> <span class="ident">LoadedSection</span> {
     <span class="kw">fn</span> <span class="ident">fmt</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">f</span>: <span class="kw-2">&amp;mut</span> <span class="ident">fmt::Formatter</span>) -&gt; <span class="ident">fmt::Result</span> {
-        <span class="macro">write!</span>(<span class="ident">f</span>, <span class="string">&quot;LoadedSection(name: {:?}, vaddr: {:#X}, size: {})&quot;</span>, <span class="self">self</span>.<span class="ident">name</span>, <span class="self">self</span>.<span class="ident">start_address</span>(), <span class="self">self</span>.<span class="ident">size</span>())
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">dbg</span> <span class="op">=</span> <span class="ident">f</span>.<span class="ident">debug_struct</span>(<span class="string">&quot;LoadedSection&quot;</span>);
+        <span class="ident">dbg</span>.<span class="ident">field</span>(<span class="string">&quot;name&quot;</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">name</span>);
+        <span class="ident">dbg</span>.<span class="ident">field</span>(<span class="string">&quot;typ&quot;</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">typ</span>);
+
+        <span class="comment">// Try to get the parent_crate&#39;s name</span>
+        <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Some</span>(<span class="ident">parent_crate_name</span>) <span class="op">=</span> <span class="self">self</span>.<span class="ident">parent_crate</span>
+            .<span class="ident">upgrade</span>()
+            .<span class="ident">and_then</span>(<span class="op">|</span><span class="ident">cref</span><span class="op">|</span> 
+                <span class="ident">cref</span>.<span class="ident">try_lock_as_ref</span>()
+                    .<span class="ident">map</span>(<span class="op">|</span><span class="ident">c</span><span class="op">|</span> <span class="ident">c</span>.<span class="ident">crate_name</span>.<span class="ident">clone</span>())
+            )
+        {
+            <span class="ident">dbg</span>.<span class="ident">field</span>(<span class="string">&quot;parent&quot;</span>, <span class="kw-2">&amp;</span><span class="ident">parent_crate_name</span>);
+        }
+        <span class="kw">else</span> {
+            <span class="ident">dbg</span>.<span class="ident">field</span>(<span class="string">&quot;parent&quot;</span>, <span class="kw-2">&amp;</span><span class="string">&quot;&lt;locked&gt;&quot;</span>);
+        }
+
+        <span class="comment">// Add the rest of the typical fields</span>
+        <span class="ident">dbg</span>.<span class="ident">field</span>(<span class="string">&quot;vaddr&quot;</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">start_address</span>())
+            .<span class="ident">field</span>(<span class="string">&quot;size&quot;</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">size</span>())
+            .<span class="ident">finish_non_exhaustive</span>()
     }
 }
 
@@ -2116,5 +2165,5 @@
     <span class="prelude-val">Ok</span>(())
 }
 </code></pre></div>
-</section><section id="search" class="content hidden"></section></div></main><div id="rustdoc-vars" data-root-path="../../" data-current-crate="crate_metadata" data-themes="ayu,dark,light" data-resource-suffix="" data-rustdoc-version="1.61.0-nightly (c84f39e6c 2022-03-20)" ></div>
+</section></div></main><div id="rustdoc-vars" data-root-path="../../" data-current-crate="crate_metadata" data-themes="ayu,dark,light" data-resource-suffix="" data-rustdoc-version="1.64.0-nightly (f8588549c 2022-07-18)" ></div>
 </body></html>

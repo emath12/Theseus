@@ -1,9 +1,10 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `kernel/mod_mgmt/src/parse_nano_core.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>parse_nano_core.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceSerif4-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../FiraSans-Regular.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../FiraSans-Medium.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceCodePro-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceSerif4-Bold.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceCodePro-Semibold.ttf.woff2"><link rel="stylesheet" type="text/css" href="../../normalize.css"><link rel="stylesheet" type="text/css" href="../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" type="text/css" href="../../ayu.css" disabled><link rel="stylesheet" type="text/css" href="../../dark.css" disabled><link rel="stylesheet" type="text/css" href="../../light.css" id="themeStyle"><script id="default-settings" ></script><script src="../../storage.js"></script><script src="../../crates.js"></script><script defer src="../../main.js"></script><script defer src="../../source-script.js"></script><script defer src="../../source-files.js"></script>
-    <noscript><link rel="stylesheet" href="../../noscript.css"></noscript><link rel="alternate icon" type="image/png" href="../../favicon-16x16.png"><link rel="alternate icon" type="image/png" href="../../favicon-32x32.png"><link rel="icon" type="image/svg+xml" href="../../favicon.svg"></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle">&#9776;</button><a class="sidebar-logo" href="../../mod_mgmt/index.html"><div class="logo-container"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></div>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `kernel/mod_mgmt/src/parse_nano_core.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>parse_nano_core.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceSerif4-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../FiraSans-Regular.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../FiraSans-Medium.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceCodePro-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceSerif4-Bold.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceCodePro-Semibold.ttf.woff2"><link rel="stylesheet" type="text/css" href="../../normalize.css"><link rel="stylesheet" type="text/css" href="../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" type="text/css" href="../../ayu.css" disabled><link rel="stylesheet" type="text/css" href="../../dark.css" disabled><link rel="stylesheet" type="text/css" href="../../light.css" id="themeStyle"><script id="default-settings" ></script><script src="../../storage.js"></script><script defer src="../../source-script.js"></script><script defer src="../../source-files.js"></script><script defer src="../../main.js"></script><noscript><link rel="stylesheet" href="../../noscript.css"></noscript><link rel="alternate icon" type="image/png" href="../../favicon-16x16.png"><link rel="alternate icon" type="image/png" href="../../favicon-32x32.png"><link rel="icon" type="image/svg+xml" href="../../favicon.svg"></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle">&#9776;</button><a class="sidebar-logo" href="../../mod_mgmt/index.html"><div class="logo-container"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></div>
         </a><h2 class="location"></h2>
     </nav>
     <nav class="sidebar"><a class="sidebar-logo" href="../../mod_mgmt/index.html"><div class="logo-container"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></div>
-        </a></nav><main><div class="width-limiter"><div class="sub-container"><a class="sub-logo-container" href="../../mod_mgmt/index.html"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></a><nav class="sub"><div class="theme-picker hidden"><button id="theme-picker" aria-label="Pick another theme!" aria-haspopup="menu" title="themes"><img width="22" height="22" alt="Pick another theme!" src="../../brush.svg"></button><div id="theme-choices" role="menu"></div></div><form class="search-form"><div class="search-container"><span></span><input class="search-input" name="search" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><button type="button" id="help-button" title="help">?</button><a id="settings-menu" href="../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../wheel.svg"></a></div></form></nav></div><section id="main-content" class="content"><div class="example-wrap"><pre class="line-numbers"><span id="1">1</span>
+        </a></nav><main><div class="width-limiter"><div class="sub-container"><a class="sub-logo-container" href="../../mod_mgmt/index.html"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></a><nav class="sub"><form class="search-form"><div class="search-container"><span></span><input class="search-input" name="search" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><button type="button">?</button></div><div id="settings-menu" tabindex="-1">
+                                <a href="../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../wheel.svg"></a></div>
+                        </div></form></nav></div><section id="main-content" class="content"><div class="example-wrap"><pre class="line-numbers"><span id="1">1</span>
 <span id="2">2</span>
 <span id="3">3</span>
 <span id="4">4</span>
@@ -824,12 +825,15 @@
 <span id="819">819</span>
 <span id="820">820</span>
 <span id="821">821</span>
+<span id="822">822</span>
+<span id="823">823</span>
+<span id="824">824</span>
 </pre><pre class="rust"><code><span class="doccomment">//! Routines for parsing the `nano_core`, the fully-linked, already-loaded base kernel image,</span>
 <span class="doccomment">//! in other words, the code that is currently executing.</span>
 <span class="doccomment">//! As such, it performs no loading, but rather just creates metadata that represents</span>
 <span class="doccomment">//! the existing kernel code that was loaded by the bootloader, and adds those functions to the system map.</span>
 
-<span class="kw">use</span> <span class="kw">crate</span>::{<span class="ident">CrateNamespace</span>, <span class="ident">mp_range</span>, <span class="ident">serde::SerializedCrate</span>};
+<span class="kw">use</span> <span class="kw">crate</span>::{<span class="ident">CrateNamespace</span>, <span class="ident">mp_range</span>};
 <span class="kw">use</span> <span class="ident">alloc</span>::{<span class="ident">collections</span>::{<span class="ident">BTreeMap</span>, <span class="ident">BTreeSet</span>}, <span class="ident">string</span>::{<span class="ident">String</span>, <span class="ident">ToString</span>}, <span class="ident">sync::Arc</span>};
 <span class="kw">use</span> <span class="ident">fs_node::FileRef</span>;
 <span class="kw">use</span> <span class="ident">path::Path</span>;
@@ -849,7 +853,7 @@
 <span class="kw">const</span> <span class="ident">NANO_CORE_CRATE_NAME</span>: <span class="kw-2">&amp;</span><span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;nano_core&quot;</span>;
 
 
-<span class="doccomment">/// Deserializes the file containing the [`SerializedCrate`] representation of the already loaded</span>
+<span class="doccomment">/// Parses and/or deserializes the file containing details about the already loaded</span>
 <span class="doccomment">/// (and currently running) `nano_core` code.</span>
 <span class="doccomment">///</span>
 <span class="doccomment">/// Basically, just searches for global (public) symbols, which are added to the system map and the crate metadata.</span>
@@ -935,16 +939,15 @@
             )
         }
         <span class="prelude-val">Some</span>(<span class="string">&quot;serde&quot;</span>) =&gt; {
-            <span class="kw">let</span> (<span class="ident">deserialized</span>, <span class="kw">_</span>): (<span class="ident">SerializedCrate</span>, <span class="kw">_</span>) <span class="op">=</span> <span class="macro">try_mp!</span>(
-                <span class="ident">bincode::serde::decode_from_slice</span>(<span class="ident">bytes</span>, <span class="ident">bincode::config::standard</span>()).<span class="ident">map_err</span>(
-                    <span class="op">|</span><span class="ident">e</span><span class="op">|</span> {
-                        <span class="macro">error!</span>(<span class="string">&quot;parse_nano_core(): error deserializing nano_core: {e}&quot;</span>);
-                        <span class="string">&quot;parse_nano_core(): error deserializing nano_core&quot;</span>
-                    }
-                )
+            <span class="kw">let</span> (<span class="ident">deserialized</span>, <span class="kw">_</span>): (<span class="ident">crate_metadata_serde::SerializedCrate</span>, <span class="kw">_</span>) <span class="op">=</span> <span class="macro">try_mp!</span>(
+                <span class="ident">bincode::serde::decode_from_slice</span>(<span class="ident">bytes</span>, <span class="ident">bincode::config::standard</span>()).<span class="ident">map_err</span>(<span class="op">|</span><span class="ident">e</span><span class="op">|</span> {
+                    <span class="macro">error!</span>(<span class="string">&quot;parse_nano_core(): error deserializing nano_core: {e}&quot;</span>);
+                    <span class="string">&quot;parse_nano_core(): error deserializing nano_core&quot;</span>
+                })
             );
             <span class="ident">drop</span>(<span class="ident">nano_core_file_locked</span>);
-            <span class="ident">deserialized</span>.<span class="ident">into_loaded_crate</span>(
+            <span class="ident"><span class="kw">crate</span>::serde::into_loaded_crate</span>(
+                <span class="ident">deserialized</span>,
                 <span class="ident">nano_core_file</span>,
                 <span class="ident">real_namespace</span>,
                 <span class="kw-2">&amp;</span><span class="ident">text_pages</span>,
@@ -1134,11 +1137,12 @@
                 .<span class="ident">ok_or</span>(<span class="string">&quot;Failed to parse the .eh_frame section header&#39;s address and size&quot;</span>)<span class="question-mark">?</span>;
             <span class="kw">let</span> <span class="ident">mapped_pages_offset</span> <span class="op">=</span> <span class="ident">rodata_pages</span>.<span class="ident">lock</span>().<span class="ident">offset_of_address</span>(<span class="ident">sec_vaddr</span>)
                 .<span class="ident">ok_or</span>(<span class="string">&quot;the nano_core .eh_frame section wasn&#39;t covered by the read-only mapped pages!&quot;</span>)<span class="question-mark">?</span>;
+            <span class="kw">let</span> <span class="ident">typ</span> <span class="op">=</span> <span class="ident">SectionType::EhFrame</span>;
             <span class="ident">crate_items</span>.<span class="ident">sections</span>.<span class="ident">insert</span>(
                 <span class="ident">section_counter</span>,
                 <span class="ident">Arc::new</span>(<span class="ident">LoadedSection::new</span>(
-                    <span class="ident">SectionType::EhFrame</span>,
-                    <span class="ident">EH_FRAME_STR_REF</span>.<span class="ident">clone</span>(),
+                    <span class="ident">typ</span>,
+                    <span class="ident">section_name_str_ref</span>(<span class="kw-2">&amp;</span><span class="ident">typ</span>),
                     <span class="ident">Arc::clone</span>(<span class="ident">rodata_pages</span>),
                     <span class="ident">mapped_pages_offset</span>,
                     <span class="ident">sec_vaddr</span>,
@@ -1154,11 +1158,12 @@
                 .<span class="ident">ok_or</span>(<span class="string">&quot;Failed to parse the .gcc_except_table section header&#39;s address and size&quot;</span>)<span class="question-mark">?</span>;
             <span class="kw">let</span> <span class="ident">mapped_pages_offset</span> <span class="op">=</span> <span class="ident">rodata_pages</span>.<span class="ident">lock</span>().<span class="ident">offset_of_address</span>(<span class="ident">sec_vaddr</span>)
                 .<span class="ident">ok_or</span>(<span class="string">&quot;the nano_core .gcc_except_table section wasn&#39;t covered by the read-only mapped pages!&quot;</span>)<span class="question-mark">?</span>;
+            <span class="kw">let</span> <span class="ident">typ</span> <span class="op">=</span> <span class="ident">SectionType::GccExceptTable</span>;
             <span class="ident">crate_items</span>.<span class="ident">sections</span>.<span class="ident">insert</span>(
                 <span class="ident">section_counter</span>,
                 <span class="ident">Arc::new</span>(<span class="ident">LoadedSection::new</span>(
-                    <span class="ident">SectionType::GccExceptTable</span>,
-                    <span class="ident">GCC_EXCEPT_TABLE_STR_REF</span>.<span class="ident">clone</span>(),
+                    <span class="ident">typ</span>,
+                    <span class="ident">section_name_str_ref</span>(<span class="kw-2">&amp;</span><span class="ident">typ</span>),
                     <span class="ident">Arc::clone</span>(<span class="ident">rodata_pages</span>),
                     <span class="ident">mapped_pages_offset</span>,
                     <span class="ident">sec_vaddr</span>,
@@ -1374,11 +1379,12 @@
                     .<span class="ident">ok_or</span>(<span class="string">&quot;the nano_core .gcc_except_table section had an invalid virtual address&quot;</span>)<span class="question-mark">?</span>;
                 <span class="kw">let</span> <span class="ident">mapped_pages_offset</span> <span class="op">=</span> <span class="ident">rodata_pages</span>.<span class="ident">lock</span>().<span class="ident">offset_of_address</span>(<span class="ident">sec_vaddr</span>)
                     .<span class="ident">ok_or</span>(<span class="string">&quot;the nano_core .gcc_except_table section wasn&#39;t covered by the read-only mapped pages!&quot;</span>)<span class="question-mark">?</span>;
+                <span class="kw">let</span> <span class="ident">typ</span> <span class="op">=</span> <span class="ident">SectionType::GccExceptTable</span>;
                 <span class="ident">crate_items</span>.<span class="ident">sections</span>.<span class="ident">insert</span>(
                     <span class="ident">section_counter</span>,
                     <span class="ident">Arc::new</span>(<span class="ident">LoadedSection::new</span>(
-                        <span class="ident">SectionType::GccExceptTable</span>,
-                        <span class="ident">GCC_EXCEPT_TABLE_STR_REF</span>.<span class="ident">clone</span>(),
+                        <span class="ident">typ</span>,
+                        <span class="ident">section_name_str_ref</span>(<span class="kw-2">&amp;</span><span class="ident">typ</span>),
                         <span class="ident">Arc::clone</span>(<span class="kw-2">&amp;</span><span class="ident">rodata_pages</span>),
                         <span class="ident">mapped_pages_offset</span>,
                         <span class="ident">sec_vaddr</span>,
@@ -1394,11 +1400,12 @@
                     .<span class="ident">ok_or</span>(<span class="string">&quot;the nano_core .eh_frame section had an invalid virtual address&quot;</span>)<span class="question-mark">?</span>;
                 <span class="kw">let</span> <span class="ident">mapped_pages_offset</span> <span class="op">=</span> <span class="ident">rodata_pages</span>.<span class="ident">lock</span>().<span class="ident">offset_of_address</span>(<span class="ident">sec_vaddr</span>)
                     .<span class="ident">ok_or</span>(<span class="string">&quot;the nano_core .eh_frame section wasn&#39;t covered by the read-only mapped pages!&quot;</span>)<span class="question-mark">?</span>;
+                <span class="kw">let</span> <span class="ident">typ</span> <span class="op">=</span> <span class="ident">SectionType::EhFrame</span>;
                 <span class="ident">crate_items</span>.<span class="ident">sections</span>.<span class="ident">insert</span>(
                     <span class="ident">section_counter</span>,
                     <span class="ident">Arc::new</span>(<span class="ident">LoadedSection::new</span>(
-                        <span class="ident">SectionType::EhFrame</span>,
-                        <span class="ident">EH_FRAME_STR_REF</span>.<span class="ident">clone</span>(),
+                        <span class="ident">typ</span>,
+                        <span class="ident">section_name_str_ref</span>(<span class="kw-2">&amp;</span><span class="ident">typ</span>),
                         <span class="ident">Arc::clone</span>(<span class="kw-2">&amp;</span><span class="ident">rodata_pages</span>),
                         <span class="ident">mapped_pages_offset</span>,
                         <span class="ident">sec_vaddr</span>,
@@ -1646,5 +1653,5 @@
     <span class="prelude-val">Ok</span>(())
 }
 </code></pre></div>
-</section><section id="search" class="content hidden"></section></div></main><div id="rustdoc-vars" data-root-path="../../" data-current-crate="mod_mgmt" data-themes="ayu,dark,light" data-resource-suffix="" data-rustdoc-version="1.61.0-nightly (c84f39e6c 2022-03-20)" ></div>
+</section></div></main><div id="rustdoc-vars" data-root-path="../../" data-current-crate="mod_mgmt" data-themes="ayu,dark,light" data-resource-suffix="" data-rustdoc-version="1.64.0-nightly (f8588549c 2022-07-18)" ></div>
 </body></html>

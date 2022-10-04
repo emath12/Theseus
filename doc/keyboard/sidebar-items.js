@@ -1,1 +1,1 @@
-initSidebarItems({"fn":[["handle_keyboard_input","returns Ok(()) if everything was handled properly. Otherwise, returns an error string."],["init","Initialize the keyboard driver.  Arguments: a reference to a queue onto which keyboard events should be enqueued. "]]});
+window.SIDEBAR_ITEMS = {"fn":[["init","Initialize the PS2 keyboard driver and register its interrupt handler."]]};

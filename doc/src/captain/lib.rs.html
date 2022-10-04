@@ -1,9 +1,10 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `kernel/captain/src/lib.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>lib.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceSerif4-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../FiraSans-Regular.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../FiraSans-Medium.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceCodePro-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceSerif4-Bold.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceCodePro-Semibold.ttf.woff2"><link rel="stylesheet" type="text/css" href="../../normalize.css"><link rel="stylesheet" type="text/css" href="../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" type="text/css" href="../../ayu.css" disabled><link rel="stylesheet" type="text/css" href="../../dark.css" disabled><link rel="stylesheet" type="text/css" href="../../light.css" id="themeStyle"><script id="default-settings" ></script><script src="../../storage.js"></script><script src="../../crates.js"></script><script defer src="../../main.js"></script><script defer src="../../source-script.js"></script><script defer src="../../source-files.js"></script>
-    <noscript><link rel="stylesheet" href="../../noscript.css"></noscript><link rel="alternate icon" type="image/png" href="../../favicon-16x16.png"><link rel="alternate icon" type="image/png" href="../../favicon-32x32.png"><link rel="icon" type="image/svg+xml" href="../../favicon.svg"></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle">&#9776;</button><a class="sidebar-logo" href="../../captain/index.html"><div class="logo-container"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></div>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `kernel/captain/src/lib.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>lib.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceSerif4-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../FiraSans-Regular.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../FiraSans-Medium.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceCodePro-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceSerif4-Bold.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceCodePro-Semibold.ttf.woff2"><link rel="stylesheet" type="text/css" href="../../normalize.css"><link rel="stylesheet" type="text/css" href="../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" type="text/css" href="../../ayu.css" disabled><link rel="stylesheet" type="text/css" href="../../dark.css" disabled><link rel="stylesheet" type="text/css" href="../../light.css" id="themeStyle"><script id="default-settings" ></script><script src="../../storage.js"></script><script defer src="../../source-script.js"></script><script defer src="../../source-files.js"></script><script defer src="../../main.js"></script><noscript><link rel="stylesheet" href="../../noscript.css"></noscript><link rel="alternate icon" type="image/png" href="../../favicon-16x16.png"><link rel="alternate icon" type="image/png" href="../../favicon-32x32.png"><link rel="icon" type="image/svg+xml" href="../../favicon.svg"></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle">&#9776;</button><a class="sidebar-logo" href="../../captain/index.html"><div class="logo-container"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></div>
         </a><h2 class="location"></h2>
     </nav>
     <nav class="sidebar"><a class="sidebar-logo" href="../../captain/index.html"><div class="logo-container"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></div>
-        </a></nav><main><div class="width-limiter"><div class="sub-container"><a class="sub-logo-container" href="../../captain/index.html"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></a><nav class="sub"><div class="theme-picker hidden"><button id="theme-picker" aria-label="Pick another theme!" aria-haspopup="menu" title="themes"><img width="22" height="22" alt="Pick another theme!" src="../../brush.svg"></button><div id="theme-choices" role="menu"></div></div><form class="search-form"><div class="search-container"><span></span><input class="search-input" name="search" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><button type="button" id="help-button" title="help">?</button><a id="settings-menu" href="../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../wheel.svg"></a></div></form></nav></div><section id="main-content" class="content"><div class="example-wrap"><pre class="line-numbers"><span id="1">1</span>
+        </a></nav><main><div class="width-limiter"><div class="sub-container"><a class="sub-logo-container" href="../../captain/index.html"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></a><nav class="sub"><form class="search-form"><div class="search-container"><span></span><input class="search-input" name="search" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><button type="button">?</button></div><div id="settings-menu" tabindex="-1">
+                                <a href="../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../wheel.svg"></a></div>
+                        </div></form></nav></div><section id="main-content" class="content"><div class="example-wrap"><pre class="line-numbers"><span id="1">1</span>
 <span id="2">2</span>
 <span id="3">3</span>
 <span id="4">4</span>
@@ -181,7 +182,6 @@
 <span id="176">176</span>
 <span id="177">177</span>
 <span id="178">178</span>
-<span id="179">179</span>
 </pre><pre class="rust"><code><span class="doccomment">//! The main initialization routine and setup logic of the OS. </span>
 <span class="doccomment">//! </span>
 <span class="doccomment">//! The `captain` steers the ship of Theseus, meaning that it contains basic logic </span>
@@ -233,12 +233,11 @@
 
 
 
-<span class="kw">use</span> <span class="ident">alloc::sync::Arc</span>;
 <span class="kw">use</span> <span class="ident">alloc::vec::Vec</span>;
 <span class="kw">use</span> <span class="ident">core::ops::DerefMut</span>;
-<span class="kw">use</span> <span class="ident">memory</span>::{<span class="ident">VirtualAddress</span>, <span class="ident">MemoryManagementInfo</span>, <span class="ident">MappedPages</span>};
+<span class="kw">use</span> <span class="ident">memory</span>::{<span class="ident">VirtualAddress</span>, <span class="ident">MappedPages</span>, <span class="ident">MmiRef</span>};
 <span class="kw">use</span> <span class="ident">kernel_config::memory::KERNEL_STACK_SIZE_IN_PAGES</span>;
-<span class="kw">use</span> <span class="ident">irq_safety</span>::{<span class="ident">MutexIrqSafe</span>, <span class="ident">enable_interrupts</span>};
+<span class="kw">use</span> <span class="ident">irq_safety::enable_interrupts</span>;
 <span class="kw">use</span> <span class="ident">stack::Stack</span>;
 
 
@@ -255,7 +254,7 @@
 <span class="doccomment">/// This does all the rest of the module loading and initialization so that the OS </span>
 <span class="doccomment">/// can continue running and do actual useful work.</span>
 <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">init</span>(
-    <span class="ident">kernel_mmi_ref</span>: <span class="ident">Arc</span><span class="op">&lt;</span><span class="ident">MutexIrqSafe</span><span class="op">&lt;</span><span class="ident">MemoryManagementInfo</span><span class="op">&gt;</span><span class="op">&gt;</span>, 
+    <span class="ident">kernel_mmi_ref</span>: <span class="ident">MmiRef</span>,
     <span class="ident">identity_mapped_pages</span>: <span class="ident">Vec</span><span class="op">&lt;</span><span class="ident">MappedPages</span><span class="op">&gt;</span>,
     <span class="ident">bsp_initial_stack</span>: <span class="ident">Stack</span>,
     <span class="ident">ap_start_realmode_begin</span>: <span class="ident">VirtualAddress</span>,
@@ -287,10 +286,6 @@
     };
     <span class="kw">let</span> <span class="ident">idt</span> <span class="op">=</span> <span class="ident">interrupts::init</span>(<span class="ident">double_fault_stack</span>.<span class="ident">top_unusable</span>(), <span class="ident">privilege_stack</span>.<span class="ident">top_unusable</span>())<span class="question-mark">?</span>;
     
-    <span class="comment">// init other featureful (non-exception) interrupt handlers</span>
-    <span class="comment">// interrupts::init_handlers_pic();</span>
-    <span class="ident">interrupts::init_handlers_apic</span>();
-    
     <span class="comment">// get BSP&#39;s apic id</span>
     <span class="kw">let</span> <span class="ident">bsp_apic_id</span> <span class="op">=</span> <span class="ident">apic::get_bsp_id</span>().<span class="ident">ok_or</span>(<span class="string">&quot;captain::init(): Coudln&#39;t get BSP&#39;s apic_id!&quot;</span>)<span class="question-mark">?</span>;
 
@@ -303,12 +298,13 @@
     
     <span class="comment">// boot up the other cores (APs)</span>
     <span class="kw">let</span> <span class="ident">ap_count</span> <span class="op">=</span> <span class="ident">multicore_bringup::handle_ap_cores</span>(
-        <span class="ident">kernel_mmi_ref</span>.<span class="ident">clone</span>(),
+        <span class="kw-2">&amp;</span><span class="ident">kernel_mmi_ref</span>,
         <span class="ident">ap_start_realmode_begin</span>,
         <span class="ident">ap_start_realmode_end</span>,
         <span class="prelude-val">Some</span>(<span class="ident">kernel_config::display::FRAMEBUFFER_MAX_RESOLUTION</span>),
     )<span class="question-mark">?</span>;
-    <span class="macro">info!</span>(<span class="string">&quot;Finished handling and booting up all {} AP cores.&quot;</span>, <span class="ident">ap_count</span>);
+    <span class="kw">let</span> <span class="ident">cpu_count</span> <span class="op">=</span> <span class="ident">ap_count</span> <span class="op">+</span> <span class="number">1</span>;
+    <span class="macro">info!</span>(<span class="string">&quot;Finished handling and booting up all {} AP cores; {} total CPUs are running.&quot;</span>, <span class="ident">ap_count</span>, <span class="ident">cpu_count</span>);
 
     <span class="comment">// //initialize the per core heaps</span>
     <span class="ident">multiple_heaps::switch_to_multiple_heaps</span>()<span class="question-mark">?</span>;
@@ -338,19 +334,22 @@
             .<span class="ident">spawn</span>()<span class="question-mark">?</span>;
     }
 
-    <span class="comment">// Now that initialization is complete, we can spawn various system tasks/daemons</span>
+    <span class="comment">// Now that key subsystems are initialized, we can spawn various system tasks/daemons</span>
     <span class="comment">// and then the first application(s).</span>
     <span class="ident">console::start_connection_detection</span>()<span class="question-mark">?</span>;
     <span class="ident">first_application::start</span>()<span class="question-mark">?</span>;
 
     <span class="macro">info!</span>(<span class="string">&quot;captain::init(): initialization done! Spawning an idle task on BSP core {} and enabling interrupts...&quot;</span>, <span class="ident">bsp_apic_id</span>);
-    <span class="ident">spawn::create_idle_task</span>(<span class="prelude-val">Some</span>(<span class="ident">bsp_apic_id</span>))<span class="question-mark">?</span>;
-    
-    <span class="comment">// Now that we&#39;ve created a new idle task for this core, we can drop ourself&#39;s bootstrapped task.</span>
-    <span class="ident">drop</span>(<span class="ident">bootstrap_task</span>);
-    <span class="comment">// Before we finish initialization, drop any other local stack variables that still exist.</span>
+    <span class="comment">// The following final initialization steps are important, and order matters:</span>
+    <span class="comment">// 1. Drop any other local stack variables that still exist.</span>
     <span class="ident">drop</span>(<span class="ident">kernel_mmi_ref</span>);
-
+    <span class="comment">// 2. Create the idle task for this CPU.</span>
+    <span class="ident">spawn::create_idle_task</span>()<span class="question-mark">?</span>;
+    <span class="comment">// 3. Cleanup bootstrap tasks, which handles this one and all other APs&#39; bootstrap tasks.</span>
+    <span class="ident">spawn::cleanup_bootstrap_tasks</span>(<span class="ident">cpu_count</span> <span class="kw">as</span> <span class="ident">usize</span>)<span class="question-mark">?</span>;
+    <span class="comment">// 4. &quot;Finish&quot; this bootstrap task, indicating it has exited and no longer needs to run.</span>
+    <span class="ident">bootstrap_task</span>.<span class="ident">finish</span>();
+    <span class="comment">// 5. Enable interrupts such that other tasks can be scheduled in.</span>
     <span class="ident">enable_interrupts</span>();
     <span class="comment">// ****************************************************</span>
     <span class="comment">// NOTE: nothing below here is guaranteed to run again!</span>
@@ -362,5 +361,5 @@
     }
 }
 </code></pre></div>
-</section><section id="search" class="content hidden"></section></div></main><div id="rustdoc-vars" data-root-path="../../" data-current-crate="captain" data-themes="ayu,dark,light" data-resource-suffix="" data-rustdoc-version="1.61.0-nightly (c84f39e6c 2022-03-20)" ></div>
+</section></div></main><div id="rustdoc-vars" data-root-path="../../" data-current-crate="captain" data-themes="ayu,dark,light" data-resource-suffix="" data-rustdoc-version="1.64.0-nightly (f8588549c 2022-07-18)" ></div>
 </body></html>
