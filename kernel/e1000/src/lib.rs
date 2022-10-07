@@ -47,7 +47,7 @@ use intel_ethernet::descriptors::{LegacyRxDescriptor, LegacyTxDescriptor};
 use nic_buffers::{TransmitBuffer, ReceiveBuffer, ReceivedFrame};
 use nic_queues::{RxQueue, TxQueue, RxQueueRegisters, TxQueueRegisters};
 
-pub const INTEL_VEND:           u16 = 0x8086;  // Vendor ID for Intel 
+pub const INTEL_VEND:           u16 = 0x8086;  // V`endor ID for Intel 
 pub const E1000_DEV:            u16 = 0x100E;  // Device ID for the e1000 Qemu, Bochs, and VirtualBox emmulated NICs
 
 const E1000_NUM_RX_DESC:        u16 = 8;

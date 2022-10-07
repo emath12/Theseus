@@ -3,6 +3,23 @@
 version = 3
 
 [[package]]
+name = "RingBuffer"
+version = "0.1.0"
+dependencies = [
+ "ethernet_smoltcp_device",
+ "intel_ethernet",
+ "irq_safety",
+ "log",
+ "memory",
+ "mpmc",
+ "network_manager",
+ "nic_buffers",
+ "nic_queues",
+ "owning_ref",
+ "smoltcp",
+]
+
+[[package]]
 name = "acpi"
 version = "0.1.0"
 dependencies = [
@@ -1406,6 +1423,7 @@ dependencies = [
 name = "ixgbe"
 version = "0.1.0"
 dependencies = [
+ "RingBuffer",
  "acpi",
  "apic",
  "bit_field 0.7.0",
@@ -2220,6 +2238,26 @@ source = "git+https://github.com/theseus-os/owning-ref-rs#0d2dcdcffd75b80157d0e7
 dependencies = [
  "spin 0.9.0",
  "stable_deref_trait",
+]
+
+[[package]]
+name = "packet_forwarder"
+version = "0.1.0"
+dependencies = [
+ "RingBuffer",
+ "getopts",
+ "hpet",
+ "irq_safety",
+ "ixgbe",
+ "libtest",
+ "log",
+ "memory",
+ "memory_structs",
+ "network_interface_card",
+ "nic_buffers",
+ "pci",
+ "spawn",
+ "terminal_print",
 ]
 
 [[package]]

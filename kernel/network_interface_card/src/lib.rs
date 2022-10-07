@@ -25,3 +25,4 @@ pub trait NetworkInterfaceCard {
     /// otherwise it will return the regular MAC address defined by the NIC hardware.
     fn mac_address(&self) -> [u8; 6];
 }
+

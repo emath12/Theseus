@@ -4,13 +4,25 @@
 //! The `PhysicalNic` trait is required for returning virtual NIC resources to the ixgbe device when dropped.
 
 use super::{IxgbeNic, get_ixgbe_nic, IxgbeRxQueueRegisters, IxgbeTxQueueRegisters};
-use physical_nic::PhysicalNic;
 use virtual_nic::VirtualNic;
 use intel_ethernet::descriptors::{AdvancedRxDescriptor, AdvancedTxDescriptor};
 use nic_queues::{RxQueue, TxQueue};
 use alloc::vec::Vec;
-use network_interface_card::NetworkInterfaceCard;
 use pci::PciLocation;
+
+extern crate nic_buffers;
+extern crate nic_queues;
+extern crate network_interface_card;
+extern crate intel_ethernet;
+extern crate alloc;
+extern crate irq_safety;
+extern crate RingBuffer; 
+
+use nic_buffers::{TransmitBuffer, ReceivedFrame};
+use nic_queues::{RxQueueRegisters, TxQueueRegisters};
+use intel_ethernet::descriptors::{TxDescriptor, RxDescriptor};
+use irq_safety::MutexIrqSafe;
+use RingBuffer::{PhysicalRingNic, RingRxQueue, RingTxQueue, RingNetworkFunctions, IxgbeVirtualNic};
 
 /// Create a virtual NIC from the ixgbe device.
 /// 
@@ -27,7 +39,7 @@ pub fn create_virtual_nic(
     default_rx_queue: usize, 
     default_tx_queue: usize
 ) -> Result<
-    VirtualNic<IxgbeRxQueueRegisters, AdvancedRxDescriptor, IxgbeTxQueueRegisters, AdvancedTxDescriptor>, 
+    IxgbeVirtualNic<IxgbeRxQueueRegisters, AdvancedRxDescriptor, IxgbeTxQueueRegisters, AdvancedTxDescriptor>, 
 &'static str> {
 
     let num_queues = ip_addresses.len();
@@ -49,7 +61,7 @@ pub fn create_virtual_nic(
         (rx_queues, tx_queues, nic.mac_address())
     };
     
-    VirtualNic::new(
+    IxgbeVirtualNic::new(
         rx_queues,
         default_rx_queue,
         tx_queues,
@@ -60,9 +72,9 @@ pub fn create_virtual_nic(
 }
 
 
-impl PhysicalNic<IxgbeRxQueueRegisters, AdvancedRxDescriptor, IxgbeTxQueueRegisters, AdvancedTxDescriptor> for IxgbeNic 
+impl PhysicalRingNic<IxgbeRxQueueRegisters, AdvancedRxDescriptor, IxgbeTxQueueRegisters, AdvancedTxDescriptor> for IxgbeNic 
 {
-    fn return_rx_queues(&mut self, mut queues: Vec<RxQueue<IxgbeRxQueueRegisters, AdvancedRxDescriptor>>) {
+    fn return_rx_queues(&mut self, mut queues: Vec<RingRxQueue<IxgbeRxQueueRegisters, AdvancedRxDescriptor>>) {
         // disable filters for all queues
         for queue in &queues {
             self.disable_5_tuple_filter(queue.filter_num.unwrap()); // safe to unwrap here because creation of virtualNIC ensures a filter
@@ -71,7 +83,7 @@ impl PhysicalNic<IxgbeRxQueueRegisters, AdvancedRxDescriptor, IxgbeTxQueueRegist
         self.rx_queues.append(&mut queues);
     }
 
-    fn return_tx_queues(&mut self, mut queues: Vec<TxQueue<IxgbeTxQueueRegisters, AdvancedTxDescriptor>>) {
+    fn return_tx_queues(&mut self, mut queues: Vec<RingTxQueue<IxgbeTxQueueRegisters, AdvancedTxDescriptor>>) {
         // return queues to physical nic
         self.tx_queues.append(&mut queues);
     }

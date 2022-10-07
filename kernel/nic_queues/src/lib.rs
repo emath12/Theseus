@@ -186,5 +186,6 @@ impl<S: TxQueueRegisters, T: TxDescriptor> TxQueue<S,T> {
         // Wait for the packet to be sent
         self.tx_descs[old_cur as usize].wait_for_packet_tx();
     }
+
 }
 

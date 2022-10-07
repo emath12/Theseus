@@ -38,10 +38,10 @@ extern crate nic_initialization;
 extern crate intel_ethernet;
 extern crate nic_buffers;
 extern crate nic_queues;
-extern crate physical_nic;
 extern crate virtual_nic;
 extern crate zerocopy;
 extern crate hashbrown;
+extern crate RingBuffer;
 
 mod regs;
 mod queue_registers;
@@ -77,6 +77,7 @@ use rand::{
 };
 use core::mem::ManuallyDrop;
 use hashbrown::HashMap;
+use RingBuffer::{Buffer, RingNetworkFunctions, RingRxQueue, init_ring_rx_queue, AcquiredFrame, init_ring_rx_buf_pool, RingTxQueue, PhysicalRingNic};
 
 /// Vendor ID for Intel
 pub const INTEL_VEND:                   u16 = 0x8086;  
@@ -143,7 +144,7 @@ lazy_static! {
     /// # Note
     /// The capacity always has to be greater than the number of buffers in the queue, which is why we multiply by 2.
     /// I'm not sure why that is, but if we try to add packets >= capacity, the addition does not make any progress.
-    static ref RX_BUFFER_POOL: mpmc::Queue<ReceiveBuffer> = mpmc::Queue::with_capacity(RX_BUFFER_POOL_SIZE * 2);
+    static ref RX_BUFFER_POOL: mpmc::Queue<Buffer> = mpmc::Queue::with_capacity(RX_BUFFER_POOL_SIZE * 2);
 }
 
 /// A struct representing an ixgbe network interface card.
@@ -166,7 +167,7 @@ pub struct IxgbeNic {
     /// Memory-mapped control registers
     regs1: BoxRefMut<MappedPages, IntelIxgbeRegisters1>,
     /// Memory-mapped control registers
-    regs2: BoxRefMut<MappedPages, IntelIxgbeRegisters2>,
+    pub regs2: BoxRefMut<MappedPages, IntelIxgbeRegisters2>,
     /// Memory-mapped control registers
     regs3: BoxRefMut<MappedPages, IntelIxgbeRegisters3>,
     /// Memory-mapped control registers
@@ -179,28 +180,28 @@ pub struct IxgbeNic {
     /// The number of rx queues enabled
     num_rx_queues: u8,
     /// Vector of the enabled rx queues
-    rx_queues: Vec<RxQueue<IxgbeRxQueueRegisters,AdvancedRxDescriptor>>,
+    pub rx_queues: Vec<RingRxQueue<IxgbeRxQueueRegisters,AdvancedRxDescriptor>>,
     /// Registers for the disabled queues
     rx_registers_disabled: Vec<IxgbeRxQueueRegisters>,
     /// The number of tx queues enabled
     num_tx_queues: u8,
     /// Vector of the enabled tx queues
-    tx_queues: Vec<TxQueue<IxgbeTxQueueRegisters,AdvancedTxDescriptor>>,
+    tx_queues: Vec<RingTxQueue<IxgbeTxQueueRegisters,AdvancedTxDescriptor>>,
     /// Registers for the disabled queues
     tx_registers_disabled: Vec<IxgbeTxQueueRegisters>,
 }
 
 // A trait which contains common functionalities for a NIC
-impl NetworkInterfaceCard for IxgbeNic {
+impl RingNetworkFunctions for IxgbeNic {
 
-    fn send_packet(&mut self, transmit_buffer: TransmitBuffer) -> Result<(), &'static str> {
+    fn send_packet(&mut self, transmit_buffer: Buffer) -> Result<(), &'static str> {
         // by default, when using the physical NIC interface, we send on queue 0.
         let qid = 0;
         self.tx_queues[qid].send_on_queue(transmit_buffer);
         Ok(())
     }
 
-    fn get_received_frame(&mut self) -> Option<ReceivedFrame> {
+    fn get_received_frame(&mut self) -> Option<AcquiredFrame> {
         // by default, when using the physical NIC interface, we receive on queue 0.
         let qid = 0;
         // return one frame from the queue's received frames
@@ -210,7 +211,7 @@ impl NetworkInterfaceCard for IxgbeNic {
     fn poll_receive(&mut self) -> Result<(), &'static str> {
         // by default, when using the physical NIC interface, we receive on queue 0.
         let qid = 0;
-        self.rx_queues[qid].poll_queue_and_store_received_packets()
+        self.rx_queues[qid].poll_queue_and_store_received_packets_as_ring()
     }
 
     fn mac_address(&self) -> [u8; 6] {
@@ -312,7 +313,7 @@ impl IxgbeNic {
         let mac_addr_hardware = Self::read_mac_address_from_nic(&mut mapped_registers_mac);
 
         // initialize the buffer pool
-        init_rx_buf_pool(RX_BUFFER_POOL_SIZE, rx_buffer_size_kbytes as u16 * 1024, &RX_BUFFER_POOL)?;
+        init_ring_rx_buf_pool(RX_BUFFER_POOL_SIZE, rx_buffer_size_kbytes as u16 * 1024, &RX_BUFFER_POOL)?;
 
         // create the rx desc queues and their packet buffers
         let (mut rx_descs, mut rx_buffers) = Self::rx_init(&mut mapped_registers1, &mut mapped_registers2, &mut rx_mapped_registers, num_rx_descriptors, rx_buffer_size_kbytes)?;
@@ -321,7 +322,7 @@ impl IxgbeNic {
         let mut rx_queues = Vec::with_capacity(rx_descs.len());
         let mut id = 0;
         while !rx_descs.is_empty() {
-            let rx_queue = RxQueue {
+            let rx_queue = RingRxQueue {
                 id: id,
                 regs: rx_mapped_registers.remove(0),
                 rx_descs: rx_descs.remove(0),
@@ -346,7 +347,7 @@ impl IxgbeNic {
         let mut tx_queues = Vec::with_capacity(tx_descs.len());
         let mut id = 0;
         while !tx_descs.is_empty() {
-            let tx_queue = TxQueue {
+            let tx_queue = RingTxQueue {
                 id: id,
                 regs: tx_mapped_registers.remove(0),
                 tx_descs: tx_descs.remove(0),
@@ -766,7 +767,7 @@ impl IxgbeNic {
     }
 
     /// Clear the statistic registers by reading from them.
-    fn clear_stats(regs: &IntelIxgbeRegisters2) {
+    pub fn clear_stats(regs: &IntelIxgbeRegisters2) {
         regs.gprc.read();
         regs.gptc.read();
         regs.gorcl.read();
@@ -795,7 +796,7 @@ impl IxgbeNic {
         rx_buffer_size_kbytes: RxBufferSizeKiB
     ) -> Result<(
         Vec<BoxRefMut<MappedPages, [AdvancedRxDescriptor]>>, 
-        Vec<Vec<ReceiveBuffer>>
+        Vec<Vec<Buffer>>
     ), &'static str> {
 
         let mut rx_descs_all_queues = Vec::new();
@@ -817,7 +818,7 @@ impl IxgbeNic {
             let rxq = &mut rx_regs[qid as usize];        
 
             // get the queue of rx descriptors and their corresponding rx buffers
-            let (rx_descs, rx_bufs_in_use) = init_rx_queue(num_rx_descs as usize, &RX_BUFFER_POOL, rx_buffer_size_kbytes as usize * 1024, rxq)?;          
+            let (rx_descs, rx_bufs_in_use) = init_ring_rx_queue(num_rx_descs as usize, &RX_BUFFER_POOL, rx_buffer_size_kbytes as usize * 1024, rxq)?;          
             
             //set the size of the packet buffers and the descriptor format used
             let mut val = rxq.srrctl.read();
@@ -1110,7 +1111,7 @@ impl IxgbeNic {
     /// The number of interrupt handlers is the number of msi vectors enabled.
     fn enable_msix_interrupts(
         regs: &mut IntelIxgbeRegisters1, 
-        rxq: &mut Vec<RxQueue<IxgbeRxQueueRegisters,AdvancedRxDescriptor>>, 
+        rxq: &mut Vec<RingRxQueue<IxgbeRxQueueRegisters,AdvancedRxDescriptor>>, 
         vector_table: &mut MsixVectorTable, 
         interrupt_handlers: &[HandlerFunc]
     ) -> Result<HashMap<u8,u8>, &'static str> {
@@ -1200,7 +1201,7 @@ impl IxgbeNic {
     fn take_rx_queues_from_physical_nic(
         &mut self, 
         num_queues: usize
-    ) -> Result<Vec<RxQueue<IxgbeRxQueueRegisters, AdvancedRxDescriptor>>, &'static str> {
+    ) -> Result<Vec<RingRxQueue<IxgbeRxQueueRegisters, AdvancedRxDescriptor>>, &'static str> {
         // We always ensure queue 0 is kept for the physical NIC
         if num_queues >= self.rx_queues.len()  {
             return Err("Not enough rx queues for the NIC to remove any");
@@ -1215,7 +1216,7 @@ impl IxgbeNic {
     fn take_tx_queues_from_physical_nic(
         &mut self, 
         num_queues: usize
-    ) -> Result<Vec<TxQueue<IxgbeTxQueueRegisters, AdvancedTxDescriptor>>, &'static str> {
+    ) -> Result<Vec<RingTxQueue<IxgbeTxQueueRegisters, AdvancedTxDescriptor>>, &'static str> {
         // We always ensure queue 0 is kept for the physical NIC
         if num_queues >= self.tx_queues.len()  {
             return Err("Not enough tx queues for the NIC to remove any");
@@ -1227,11 +1228,12 @@ impl IxgbeNic {
 
     /// Retrieves `num_packets` packets from queue `qid` and stores them in `buffers`.
     /// Returns the total number of received packets.
-    pub fn rx_batch(&mut self, qid: usize, buffers: &mut Vec<ReceiveBuffer>, num_packets: usize) -> Result<usize, &'static str> {
+    pub fn rx_batch(&mut self, qid: usize, buffers: &mut Vec<Buffer>, num_packets: usize) -> Result<usize, &'static str> {
         if qid >= self.rx_queues.len() {
             return Err("Invalid queue id");
         }
 
+        let mut new_bufs_made = 0; 
         let queue = &mut self.rx_queues[qid];
         let mut rx_cur = queue.rx_cur as usize;
         let mut last_rx_cur = queue.rx_cur as usize;
@@ -1258,10 +1260,11 @@ impl IxgbeNic {
                 Some(rx_buf) => rx_buf,
                 None => {
                     warn!("NIC RX BUF POOL WAS EMPTY.... reallocating! This means that no task is consuming the accumulated received ethernet frames.");
+
                     // if the pool was empty, then we allocate a new receive buffer
                     let len = queue.rx_buffer_size_bytes;
                     let (mp, phys_addr) = create_contiguous_mapping(len as usize, NIC_MAPPING_FLAGS)?;
-                    ReceiveBuffer::new(mp, phys_addr, len, queue.rx_buffer_pool)
+                    Buffer::new(mp, phys_addr, len, queue.rx_buffer_pool)
                 }
             };
 
@@ -1291,8 +1294,8 @@ impl IxgbeNic {
     }
 
     /// Sends all packets in `buffers` on queue `qid` if there are descriptors available.
-    /// (number of packets sent, used transmit buffers that can now be dropped or reused) are returned.
-    pub fn tx_batch(&mut self, qid: usize, buffers: &mut Vec<TransmitBuffer>) -> Result<(usize, Vec<TransmitBuffer>), &'static str> {
+    /// (number of packets sent, used buffers that can now be dropped or reused) are returned.
+    pub fn tx_batch(&mut self, qid: usize, buffers: &mut Vec<Buffer>) -> Result<(usize, Vec<Buffer>), &'static str> {
         if qid >= self.tx_queues.len() {
             return Err("Invalid queue id");
         }
@@ -1331,10 +1334,10 @@ impl IxgbeNic {
 
     /// Removes multiples of `TX_CLEAN_BATCH` packets from `queue`.    
     /// (code taken from https://github.com/ixy-languages/ixy.rs/blob/master/src/ixgbe.rs#L1016)
-    fn tx_clean(queue: &mut TxQueue<IxgbeTxQueueRegisters,AdvancedTxDescriptor>) -> Vec<TransmitBuffer> {
+    fn tx_clean(queue: &mut RingTxQueue<IxgbeTxQueueRegisters,AdvancedTxDescriptor>) -> Vec<Buffer> {
         const TX_CLEAN_BATCH: usize = 32;
 
-        let mut used_buffers: Vec<TransmitBuffer> = Vec::with_capacity(TX_CLEAN_BATCH);
+        let mut used_buffers: Vec<Buffer> = Vec::with_capacity(TX_CLEAN_BATCH);
         let mut tx_clean = queue.tx_clean as usize;
         let tx_cur = queue.tx_cur;
 
@@ -1427,24 +1430,24 @@ pub enum FilterProtocol {
     Other = 3
 }
 
-/// A helper function to poll the nic receive queues (only for testing purposes).
-pub fn rx_poll_mq(qid: usize, nic_id: PciLocation) -> Result<ReceivedFrame, &'static str> {
-    let nic_ref = get_ixgbe_nic(nic_id)?;
-    let mut nic = nic_ref.lock();      
-    nic.rx_queues[qid as usize].poll_queue_and_store_received_packets()?;
-    let frame = nic.rx_queues[qid as usize].return_frame().ok_or("no frame")?;
-    Ok(frame)
-}
+// /// A helper function to poll the nic receive queues (only for testing purposes).
+// pub fn rx_poll_mq(qid: usize, nic_id: PciLocation) -> Result<AcquiredFrame, &'static str> {
+//     let nic_ref = get_ixgbe_nic(nic_id)?;
+//     let mut nic = nic_ref.lock();      
+//     nic.rx_queues[qid as usize].poll_queue_and_store_received_packets_as_ring()?;
+//     let frame = nic.rx_queues[qid as usize].return_frame().ok_or("no frame")?;
+//     Ok(frame)
+// }
 
-/// A helper function to send a test packet on a nic transmit queue (only for testing purposes).
-pub fn tx_send_mq(qid: usize, nic_id: PciLocation, packet: Option<TransmitBuffer>) -> Result<(), &'static str> {
-    let packet = packet.unwrap_or(test_packets::create_dhcp_test_packet()?);
-    let nic_ref = get_ixgbe_nic(nic_id)?;
-    let mut nic = nic_ref.lock();  
+// /// A helper function to send a test packet on a nic transmit queue (only for testing purposes).
+// pub fn tx_send_mq(qid: usize, nic_id: PciLocation, packet: Option<Buffer>) -> Result<(), &'static str> {
+//     let packet = packet.unwrap_or(test_packets::create_dhcp_test_packet()?);
+//     let nic_ref = get_ixgbe_nic(nic_id)?;
+//     let mut nic = nic_ref.lock();  
 
-    nic.tx_queues[qid].send_on_queue(packet);
-    Ok(())
-}
+//     nic.tx_queues[qid].send_on_queue(packet);
+//     Ok(())
+// }
 
 /// A generic interrupt handler that can be used for packet reception interrupts for any queue on any ixgbe nic.
 /// It returns the interrupt number for the rx queue 'qid'.
@@ -1452,7 +1455,7 @@ fn rx_interrupt_handler(qid: u8, nic_id: PciLocation) -> Option<u8> {
     match get_ixgbe_nic(nic_id) {
         Ok(ref ixgbe_nic_ref) => {
             let mut ixgbe_nic = ixgbe_nic_ref.lock();
-            let _ = ixgbe_nic.rx_queues[qid as usize].poll_queue_and_store_received_packets();
+            let _ = ixgbe_nic.rx_queues[qid as usize].poll_queue_and_store_received_packets_as_ring();
             ixgbe_nic.interrupt_num.get(&qid).map(|int| *int)
         }
         Err(e) => {

@@ -155,7 +155,7 @@ pub fn init(key_producer: Queue<Event>, mouse_producer: Queue<Event>) -> Result<
                     VIRT_ENABLED, 
                     None, 
                     RSS_ENABLED, 
-                    ixgbe::RxBufferSizeKiB::Buffer2KiB,
+                    ixgbe::RxBufferSizeKiB::Buffer2KiB, // right here, size can't be smaller than what's passed.
                     RX_DESCS,
                     TX_DESCS
                 )?;
@@ -181,14 +181,15 @@ pub fn init(key_producer: Queue<Event>, mouse_producer: Queue<Event>) -> Result<
 
     // Once all the NICs have been initialized, we can store them and add them to the list of network interfaces.
     let ixgbe_nics = ixgbe::IXGBE_NICS.call_once(|| ixgbe_devs);
-    for ixgbe_nic_ref in ixgbe_nics.iter() {
-        let ixgbe_interface = EthernetNetworkInterface::new_ipv4_interface(
-            ixgbe_nic_ref, 
-            DEFAULT_LOCAL_IP, 
-            &DEFAULT_GATEWAY_IP
-        )?;
-        add_to_network_interfaces(ixgbe_interface);
-    }
+    
+    // for ixgbe_nic_ref in ixgbe_nics.iter() {
+    //     let ixgbe_interface = EthernetNetworkInterface::new_ipv4_interface(
+    //         ixgbe_nic_ref, 
+    //         DEFAULT_LOCAL_IP, 
+    //         &DEFAULT_GATEWAY_IP
+    //     )?;
+    //     add_to_network_interfaces(ixgbe_interface);
+    // }
 
     // Convenience notification for developers to inform them of no networking devices
     if network_manager::NETWORK_INTERFACES.lock().is_empty() {

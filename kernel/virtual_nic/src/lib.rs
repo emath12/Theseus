@@ -99,8 +99,8 @@ impl<S: RxQueueRegisters, T: RxDescriptor, U: TxQueueRegisters, V: TxDescriptor>
 }
 
 impl<S: RxQueueRegisters, T: RxDescriptor, U: TxQueueRegisters, V: TxDescriptor> NetworkInterfaceCard for VirtualNic<S,T,U,V> {
-    fn send_packet(&mut self, transmit_buffer: TransmitBuffer) -> Result<(), &'static str> {
-        self.tx_queues[self.default_tx_queue].send_on_queue(transmit_buffer);
+    fn send_packet(&mut self, buffer: TransmitBuffer) -> Result<(), &'static str> {
+        self.tx_queues[self.default_tx_queue].send_on_queue(buffer);
         Ok(())
     }
 
